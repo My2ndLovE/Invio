@@ -1,0 +1,5 @@
+name = "invio-frontend"
+pages_build_output_dir = "_fresh"
+
+[vars]
+BACKEND_URL = "https://invio-backend.sam-my2ndlove.workers.dev"

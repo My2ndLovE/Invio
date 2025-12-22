@@ -1,4 +1,3 @@
-// @ts-nocheck: keep controller consistent with existing loose typing in routes
 import { getDatabase } from "../database/init.ts";
 import { TaxDefinition } from "../types/index.ts";
 import { generateUUID } from "../utils/uuid.ts";
@@ -39,7 +38,7 @@ function toRequiredPercent(value: unknown): number {
   return n;
 }
 
-function mapRowToTaxDefinition(row: unknown[]): TaxDefinition {
+function mapRowToTaxDefinition(row: any): TaxDefinition {
   return {
     id: row[0] as string,
     code: (row[1] ?? undefined) as string | undefined,
@@ -55,27 +54,27 @@ function mapRowToTaxDefinition(row: unknown[]): TaxDefinition {
   };
 }
 
-export function getTaxDefinitions(): TaxDefinition[] {
+export async function getTaxDefinitions(): Promise<TaxDefinition[]> {
   const db = getDatabase();
-  const rows = db.query(
+  const rows = await db.query(
     "SELECT id, code, name, percent, category_code, country_code, vendor_specific_id, default_included, metadata FROM tax_definitions ORDER BY created_at DESC",
-  ) as unknown[][];
+  ) as any[][];
   return rows.map(mapRowToTaxDefinition);
 }
 
-export function getTaxDefinitionById(id: string): TaxDefinition | null {
+export async function getTaxDefinitionById(id: string): Promise<TaxDefinition | null> {
   const db = getDatabase();
-  const rows = db.query(
+  const rows = await db.query(
     "SELECT id, code, name, percent, category_code, country_code, vendor_specific_id, default_included, metadata FROM tax_definitions WHERE id = ?",
     [id],
-  ) as unknown[][];
+  ) as any[][];
   if (rows.length === 0) return null;
-  return mapRowToTaxDefinition(rows[0] as unknown[]);
+  return mapRowToTaxDefinition(rows[0]);
 }
 
-export function createTaxDefinition(
+export async function createTaxDefinition(
   data: Record<string, unknown>,
-): TaxDefinition {
+): Promise<TaxDefinition> {
   const db = getDatabase();
 
   const id = generateUUID();
@@ -93,7 +92,7 @@ export function createTaxDefinition(
   const metadata = toOptionalTrimmed(data.metadata);
   const now = new Date();
 
-  db.query(
+  await db.query(
     `INSERT INTO tax_definitions (
       id, code, name, percent, category_code, country_code, vendor_specific_id, default_included, metadata, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -125,13 +124,13 @@ export function createTaxDefinition(
   };
 }
 
-export function updateTaxDefinition(
+export async function updateTaxDefinition(
   id: string,
   data: Record<string, unknown>,
-): TaxDefinition {
+): Promise<TaxDefinition> {
   const db = getDatabase();
 
-  const existing = getTaxDefinitionById(id);
+  const existing = await getTaxDefinitionById(id);
   if (!existing) throw new Error("NOT_FOUND");
 
   const code = toNullableTrimmed(data.code);
@@ -148,7 +147,7 @@ export function updateTaxDefinition(
   const metadata = toOptionalTrimmed(data.metadata);
   const now = new Date();
 
-  db.query(
+  await db.query(
     `UPDATE tax_definitions
        SET code = ?, name = ?, percent = ?, category_code = ?, country_code = ?, vendor_specific_id = ?, default_included = ?, metadata = ?, updated_at = ?
      WHERE id = ?`,
@@ -179,10 +178,10 @@ export function updateTaxDefinition(
   };
 }
 
-export function deleteTaxDefinition(id: string): { id: string } {
+export async function deleteTaxDefinition(id: string): Promise<{ id: string }> {
   const db = getDatabase();
-  const existing = getTaxDefinitionById(id);
+  const existing = await getTaxDefinitionById(id);
   if (!existing) throw new Error("NOT_FOUND");
-  db.query("DELETE FROM tax_definitions WHERE id = ?", [id]);
+  await db.query("DELETE FROM tax_definitions WHERE id = ?", [id]);
   return { id };
 }

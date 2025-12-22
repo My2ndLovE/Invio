@@ -7,7 +7,7 @@ import {
   PDFString,
 } from "pdf-lib";
 // Use Puppeteer (headless Chrome) for HTML -> PDF rendering instead of wkhtmltopdf
-import puppeteer from "puppeteer-core";
+import puppeteer from "@cloudflare/puppeteer";
 import { generateInvoiceXML, XMLProfile } from "./xmlProfiles.ts";
 import { generateZugferdXMP } from "./xmp.ts";
 import {
@@ -104,7 +104,7 @@ function formatDate(d?: Date, format: string = "YYYY-MM-DD") {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
-  
+
   if (format === "DD.MM.YYYY") {
     return `${day}.${month}.${year}`;
   }
@@ -301,11 +301,19 @@ export async function generateInvoicePDF(
   businessSettings?: BusinessSettings,
   templateId?: string,
   customHighlightColor?: string,
-  opts?: { embedXmlProfileId?: string; embedXml?: boolean; xmlOptions?: Record<string, unknown>; dateFormat?: string; numberFormat?: "comma" | "period"; locale?: string },
+  opts?: {
+    embedXmlProfileId?: string;
+    embedXml?: boolean;
+    xmlOptions?: Record<string, unknown>;
+    dateFormat?: string;
+    numberFormat?: "comma" | "period";
+    locale?: string;
+    browser?: any; // Cloudflare Browser Rendering binding
+  },
 ): Promise<Uint8Array> {
   // Inline remote logo when possible for robust HTML rendering
   const inlined = await inlineLogoIfPossible(businessSettings);
-  const html = buildInvoiceHTML(
+  const html = await buildInvoiceHTML(
     invoiceData,
     inlined,
     templateId,
@@ -315,7 +323,7 @@ export async function generateInvoicePDF(
     opts?.locale ?? invoiceData.locale ?? inlined?.locale,
   );
   // First, attempt Puppeteer-based rendering
-  let pdfBytes = await tryPuppeteerPdf(html);
+  let pdfBytes = await tryPuppeteerPdf(html, opts?.browser);
   if (!pdfBytes) {
     throw new Error(
       "Chromium-based PDF rendering failed. Install Google Chrome/Chromium or set PUPPETEER_EXECUTABLE_PATH.",
@@ -355,7 +363,7 @@ export async function generateInvoicePDF(
   return pdfBytes as Uint8Array;
 }
 
-export function buildInvoiceHTML(
+export async function buildInvoiceHTML(
   invoice: InvoiceWithDetails,
   settings?: BusinessSettings,
   templateId?: string,
@@ -363,7 +371,7 @@ export function buildInvoiceHTML(
   dateFormat?: string,
   numberFormat?: "comma" | "period",
   localeOverride?: string,
-): string {
+): Promise<string> {
   const ctx = buildContext(
     invoice,
     settings,
@@ -375,17 +383,16 @@ export function buildInvoiceHTML(
   const hl = normalizeHex(highlight) || "#2563eb";
   const hlLight = lighten(hl, 0.86);
 
-  let template;
+  let template = null;
   if (templateId) {
     try {
-      template = getTemplateById(templateId);
+      template = await getTemplateById(templateId);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.warn(`Failed to load template ${templateId}: ${message}`);
+      console.warn(`Failed to load template ${templateId}:`, err);
     }
   }
 
-  const fallbackTemplate = template ?? getDefaultTemplate();
+  const fallbackTemplate = template ?? (await getDefaultTemplate());
   if (!fallbackTemplate) {
     throw new Error(
       "No invoice templates available. Ensure database migrations have seeded templates.",
@@ -399,26 +406,36 @@ export function buildInvoiceHTML(
   });
 }
 
-async function tryPuppeteerPdf(html: string): Promise<Uint8Array | null> {
+async function tryPuppeteerPdf(html: string, cloudflareBrowser?: any): Promise<Uint8Array | null> {
   try {
-    const { executablePath, channel } = await resolveChromiumLaunchConfig();
-    const launchOptions: NonNullable<Parameters<typeof puppeteer.launch>[0]> = {
-      headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--font-render-hinting=medium",
-        "--disable-dev-shm-usage",
-      ],
-    };
+    let browser;
 
-    if (executablePath) {
-      launchOptions.executablePath = executablePath;
-    } else if (channel) {
-      (launchOptions as { channel?: string }).channel = channel;
+    if (cloudflareBrowser) {
+      // Cloudflare Browser Rendering path
+      // Note: We assume the binding has a .launch() method that returns a puppeteer-compatible browser
+      browser = await cloudflareBrowser.launch();
+    } else {
+      // Local/Server Deno path
+      const { executablePath, channel } = await resolveChromiumLaunchConfig();
+      const launchOptions: NonNullable<Parameters<typeof puppeteer.launch>[0]> = {
+        headless: true,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--font-render-hinting=medium",
+          "--disable-dev-shm-usage",
+        ],
+      };
+
+      if (executablePath) {
+        launchOptions.executablePath = executablePath;
+      } else if (channel) {
+        (launchOptions as { channel?: string }).channel = channel;
+      }
+
+      browser = await puppeteer.launch(launchOptions);
     }
 
-    const browser = await puppeteer.launch(launchOptions);
     try {
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: "networkidle0", timeout: 30000 });

@@ -1,4 +1,4 @@
-import { create, decode, verify } from "djwt";
+import { sign, verify, decode } from "hono/jwt";
 import { getJwtSecret, getAdminCredentials } from "./env.ts";
 
 function validateSecret(secretKey: string) {
@@ -22,37 +22,21 @@ function validateAdminCredentials() {
   }
 }
 
-async function getKey(): Promise<CryptoKey> {
-  validateAdminCredentials();
-  const secretKey = getJwtSecret();
-  validateSecret(secretKey);
-  const secretBytes = new TextEncoder().encode(secretKey.trim());
-  const key = await crypto.subtle.importKey(
-    "raw",
-    secretBytes,
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign", "verify"],
-  );
-  return key;
-}
-
 export async function createJWT(payload: Record<string, unknown>) {
-  const key = await getKey();
-  return await create({ alg: "HS256", typ: "JWT" }, payload, key);
+  validateAdminCredentials();
+  const secret = getJwtSecret();
+  validateSecret(secret);
+  return await sign(payload, secret, "HS256");
 }
 
 export async function generateJWT(adminUser: string) {
-  const payload = { user: adminUser };
-  const key = await getKey();
-  return await create({ alg: "HS256", typ: "JWT" }, payload, key);
+  return await createJWT({ user: adminUser });
 }
 
 export async function verifyJWT(token: string) {
   try {
-    const key = await getKey();
-    const payload = await verify(token, key);
-    return payload;
+    const secret = getJwtSecret();
+    return await verify(token, secret, "HS256");
   } catch (error) {
     console.error("JWT verification failed:", error);
     return null;
@@ -60,5 +44,6 @@ export async function verifyJWT(token: string) {
 }
 
 export function decodeJWT(token: string) {
-  return decode(token);
+  const { payload } = decode(token);
+  return payload;
 }

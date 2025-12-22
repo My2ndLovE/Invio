@@ -5,7 +5,7 @@ import {
 } from "../types/index.ts";
 import { generateUUID } from "../utils/uuid.ts";
 
-const mapRowToCustomer = (row: unknown[]): Customer => ({
+const mapRowToCustomer = (row: any): Customer => ({
   id: row[0] as string,
   name: row[1] as string,
   contactName: (row[2] ?? undefined) as string | undefined,
@@ -20,52 +20,50 @@ const mapRowToCustomer = (row: unknown[]): Customer => ({
   postalCode: (row[10] ?? undefined) as string | undefined,
 });
 
-export const getCustomers = () => {
+export const getCustomers = async (): Promise<Customer[]> => {
   const db = getDatabase();
-  // Select with optional columns city, postal_code if exist; SQLite will ignore missing columns in SELECT list only by error, so use PRAGMA to detect
-  let results: unknown[][] = [];
+  let results: any[][] = [];
   try {
-    results = db.query(
+    results = await db.query(
       "SELECT id, name, contact_name, email, phone, address, country_code, tax_id, created_at, city, postal_code FROM customers ORDER BY created_at DESC",
-    ) as unknown[][];
+    ) as any[][];
   } catch (_e) {
-    // fallback older schema
     try {
-      results = db.query(
+      results = await db.query(
         "SELECT id, name, email, phone, address, country_code, tax_id, created_at, city, postal_code FROM customers ORDER BY created_at DESC",
-      ) as unknown[][];
+      ) as any[][];
     } catch (_e2) {
-      results = db.query(
+      results = await db.query(
         "SELECT id, name, email, phone, address, country_code, tax_id, created_at FROM customers ORDER BY created_at DESC",
-      ) as unknown[][];
+      ) as any[][];
     }
   }
-  return results.map((row: unknown[]) => mapRowToCustomer(row));
+  return results.map((row: any) => mapRowToCustomer(row));
 };
 
-export const getCustomerById = (id: string): Customer | null => {
+export const getCustomerById = async (id: string): Promise<Customer | null> => {
   const db = getDatabase();
-  let results: unknown[][] = [];
+  let results: any[][] = [];
   try {
-    results = db.query(
+    results = await db.query(
       "SELECT id, name, contact_name, email, phone, address, country_code, tax_id, created_at, city, postal_code FROM customers WHERE id = ?",
       [id],
-    ) as unknown[][];
+    ) as any[][];
   } catch (_e) {
     try {
-      results = db.query(
+      results = await db.query(
         "SELECT id, name, email, phone, address, country_code, tax_id, created_at, city, postal_code FROM customers WHERE id = ?",
         [id],
-      ) as unknown[][];
+      ) as any[][];
     } catch (_e2) {
-      results = db.query(
+      results = await db.query(
         "SELECT id, name, email, phone, address, country_code, tax_id, created_at FROM customers WHERE id = ?",
         [id],
-      ) as unknown[][];
+      ) as any[][];
     }
   }
   if (results.length === 0) return null;
-  return mapRowToCustomer(results[0] as unknown[]);
+  return mapRowToCustomer(results[0]);
 };
 
 const toNullable = (v?: string): string | null => {
@@ -74,12 +72,11 @@ const toNullable = (v?: string): string | null => {
   return s.length ? s : null;
 };
 
-export const createCustomer = (data: CreateCustomerRequest): Customer => {
+export const createCustomer = async (data: CreateCustomerRequest): Promise<Customer> => {
   const db = getDatabase();
   const customerId = generateUUID();
   const now = new Date();
 
-  // Normalize optional fields: store NULLs for empty strings
   const contactName = toNullable(data.contactName);
   const email = toNullable(data.email);
   const phone = toNullable(data.phone);
@@ -90,67 +87,33 @@ export const createCustomer = (data: CreateCustomerRequest): Customer => {
   const taxId = toNullable(data.taxId);
 
   try {
-    db.query(
+    await db.query(
       `
       INSERT INTO customers (id, name, contact_name, email, phone, address, country_code, tax_id, created_at, city, postal_code)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
-      [
-        customerId,
-        data.name,
-        contactName,
-        email,
-        phone,
-        address,
-        countryCode,
-        taxId,
-        now,
-        city,
-        postal,
-      ],
+      [customerId, data.name, contactName, email, phone, address, countryCode, taxId, now, city, postal],
     );
   } catch (_e) {
-    // fallback older schema
     try {
-      db.query(
+      await db.query(
         `
         INSERT INTO customers (id, name, email, phone, address, country_code, tax_id, created_at, city, postal_code)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
-        [
-          customerId,
-          data.name,
-          email,
-          phone,
-          address,
-          countryCode,
-          taxId,
-          now,
-          city,
-          postal,
-        ],
+        [customerId, data.name, email, phone, address, countryCode, taxId, now, city, postal],
       );
     } catch (_e2) {
-      db.query(
+      await db.query(
         `
         INSERT INTO customers (id, name, email, phone, address, country_code, tax_id, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `,
-        [
-          customerId,
-          data.name,
-          email,
-          phone,
-          address,
-          countryCode,
-          taxId,
-          now,
-        ],
+        [customerId, data.name, email, phone, address, countryCode, taxId, now],
       );
     }
   }
 
-  // Return undefined for missing optional fields
   return {
     id: customerId,
     name: data.name,
@@ -166,140 +129,69 @@ export const createCustomer = (data: CreateCustomerRequest): Customer => {
   };
 };
 
-export const updateCustomer = (
+export const updateCustomer = async (
   id: string,
   data: Partial<CreateCustomerRequest>,
-): Customer | null => {
+): Promise<Customer | null> => {
   const db = getDatabase();
-  // Read existing to support partials and normalize empties
-  const existing = getCustomerById(id);
+  const existing = await getCustomerById(id);
   if (!existing) return null;
 
-  const next = {
-    name: data.name ?? existing.name,
-    contactName: data.contactName === undefined ? existing.contactName : undefined,
-    email: data.email === undefined ? existing.email : undefined,
-    phone: data.phone === undefined ? existing.phone : undefined,
-    address: data.address === undefined ? existing.address : undefined,
-    taxId: data.taxId === undefined ? existing.taxId : undefined,
-  } as Partial<Customer>;
-
-  // If provided, coerce empty to NULL
-  const contactName = data.contactName !== undefined
-    ? toNullable(data.contactName)
-    : (existing.contactName ?? null);
-  const email = data.email !== undefined
-    ? toNullable(data.email)
-    : (existing.email ?? null);
-  const phone = data.phone !== undefined
-    ? toNullable(data.phone)
-    : (existing.phone ?? null);
-  const address = data.address !== undefined
-    ? toNullable(data.address)
-    : (existing.address ?? null);
-  const countryCode = data.countryCode !== undefined
-    ? toNullable(data.countryCode)
-    : (existing.countryCode ?? null);
-  const taxId = data.taxId !== undefined
-    ? toNullable(data.taxId)
-    : (existing.taxId ?? null);
-  const city = (data as { city?: string }).city !== undefined
-    ? toNullable((data as { city?: string }).city)
-    : (existing.city ?? null);
-  const postal = (data as { postalCode?: string }).postalCode !== undefined
-    ? toNullable((data as { postalCode?: string }).postalCode)
-    : (existing.postalCode ?? null);
+  const name = data.name ?? existing.name;
+  const contactName = data.contactName !== undefined ? toNullable(data.contactName) : (existing.contactName ?? null);
+  const email = data.email !== undefined ? toNullable(data.email) : (existing.email ?? null);
+  const phone = data.phone !== undefined ? toNullable(data.phone) : (existing.phone ?? null);
+  const address = data.address !== undefined ? toNullable(data.address) : (existing.address ?? null);
+  const countryCode = data.countryCode !== undefined ? toNullable(data.countryCode) : (existing.countryCode ?? null);
+  const taxId = data.taxId !== undefined ? toNullable(data.taxId) : (existing.taxId ?? null);
+  const city = (data as { city?: string }).city !== undefined ? toNullable((data as { city?: string }).city) : (existing.city ?? null);
+  const postal = (data as { postalCode?: string }).postalCode !== undefined ? toNullable((data as { postalCode?: string }).postalCode) : (existing.postalCode ?? null);
 
   try {
-    db.query(
+    await db.query(
       `
       UPDATE customers SET 
         name = ?, contact_name = ?, email = ?, phone = ?, address = ?, country_code = ?, tax_id = ?, city = ?, postal_code = ?
       WHERE id = ?
     `,
-      [
-        next.name,
-        contactName,
-        email,
-        phone,
-        address,
-        countryCode,
-        taxId,
-        city,
-        postal,
-        id,
-      ],
+      [name, contactName, email, phone, address, countryCode, taxId, city, postal, id],
     );
   } catch (_e) {
     try {
-      db.query(
+      await db.query(
         `
         UPDATE customers SET 
           name = ?, email = ?, phone = ?, address = ?, country_code = ?, tax_id = ?, city = ?, postal_code = ?
         WHERE id = ?
       `,
-        [
-          next.name,
-          email,
-          phone,
-          address,
-          countryCode,
-          taxId,
-          city,
-          postal,
-          id,
-        ],
+        [name, email, phone, address, countryCode, taxId, city, postal, id],
       );
     } catch (_e2) {
-      db.query(
+      await db.query(
         `
         UPDATE customers SET 
           name = ?, email = ?, phone = ?, address = ?, country_code = ?, tax_id = ?
         WHERE id = ?
       `,
-        [
-          next.name,
-          email,
-          phone,
-          address,
-          countryCode,
-          taxId,
-          id,
-        ],
+        [name, email, phone, address, countryCode, taxId, id],
       );
     }
   }
 
-  return getCustomerById(id);
+  return await getCustomerById(id);
 };
 
-export function deleteCustomer(customerId: string): void {
-  try {
-    const db = getDatabase();
+export async function deleteCustomer(customerId: string): Promise<void> {
+  const db = getDatabase();
+  const invoices = await db.query(
+    `SELECT COUNT(*) FROM invoices WHERE customer_id = ?`,
+    [customerId],
+  );
 
-    // First check if customer has any invoices
-    const invoices = db.query(
-      `
-      SELECT COUNT(*) as count FROM invoices WHERE customer_id = ?
-    `,
-      [customerId],
-    );
-
-    const invoiceCount = invoices[0] ? Number(invoices[0][0]) : 0;
-
-    if (invoiceCount > 0) {
-      throw new Error(
-        `Cannot delete customer: ${invoiceCount} invoice(s) exist for this customer. Delete invoices first.`,
-      );
-    }
-
-    // Delete customer if no invoices exist
-    db.query(`DELETE FROM customers WHERE id = ?`, [customerId]);
-    if ((getDatabase() as unknown as { changes: number }).changes === 0) {
-      throw new Error("Customer not found");
-    }
-  } catch (error) {
-    console.error("Error deleting customer:", error);
-    throw error;
+  const invoiceCount = invoices[0] ? Number((invoices[0] as any)[0]) : 0;
+  if (invoiceCount > 0) {
+    throw new Error(`Cannot delete customer: ${invoiceCount} invoice(s) exist.`);
   }
+
+  await db.query(`DELETE FROM customers WHERE id = ?`, [customerId]);
 }

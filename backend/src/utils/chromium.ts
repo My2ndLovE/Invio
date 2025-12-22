@@ -20,6 +20,9 @@ const WINDOWS_CANDIDATES = [
 ];
 
 function candidatePaths(): string[] {
+  // Gracefully handle non-Deno environments
+  if (typeof Deno === "undefined") return [];
+
   const envPath = Deno.env.get("PUPPETEER_EXECUTABLE_PATH");
   const list: string[] = [];
   if (envPath && envPath.trim()) {
@@ -38,6 +41,7 @@ function candidatePaths(): string[] {
 }
 
 async function fileExists(path: string): Promise<boolean> {
+  if (typeof Deno === "undefined") return false;
   try {
     const stat = await Deno.stat(path);
     return stat.isFile;
@@ -61,18 +65,21 @@ export async function resolveChromiumLaunchConfig(): Promise<{ executablePath?: 
   if (executablePath) {
     return { executablePath, candidates };
   }
-  const channel = Deno.env.get("PUPPETEER_CHANNEL")?.trim() || "chrome";
+  const channel = (typeof Deno !== "undefined" ? Deno.env.get("PUPPETEER_CHANNEL") : undefined)?.trim() || "chrome";
   return { channel, candidates };
 }
 
 export async function logChromiumAvailability(): Promise<void> {
+  if (typeof Deno === "undefined") {
+    console.log("Running in non-Deno environment. Skipping Chromium check.");
+    return;
+  }
   const { executablePath, candidates } = await resolveChromiumLaunchConfig();
   if (executablePath) {
     console.log(`Chromium executable detected at ${executablePath}`);
     return;
   }
-  console.error(
-    "⚠️  No Chromium executable detected. PDF generation requires Google Chrome, Chromium, or setting PUPPETEER_EXECUTABLE_PATH. Checked paths: " +
-      candidates.join(", "),
+  console.warn(
+    "⚠️  No Chromium executable detected. PDF generation requires Google Chrome, Chromium, or setting PUPPETEER_EXECUTABLE_PATH.",
   );
 }
