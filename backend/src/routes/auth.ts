@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { createJWT } from "../utils/jwt.ts";
-import { getAdminCredentials } from "../utils/env.ts";
+import { getAdminCredentials, getEnv } from "../utils/env.ts";
 
 function getSessionTtlSeconds(): number {
-  const parsed = parseInt(Deno.env.get("SESSION_TTL_SECONDS") || "3600", 10);
+  const parsed = parseInt(getEnv("SESSION_TTL_SECONDS", "3600") || "3600", 10);
   const candidate = Number.isFinite(parsed) ? parsed : 3600;
   return Math.max(300, Math.min(60 * 60 * 12, candidate));
 }
@@ -28,14 +28,15 @@ authRoutes.post("/auth/login", async (c) => {
     return c.json({ error: "Missing credentials" }, 400);
   }
 
-  const { username: adminUser, password: adminPass } = getAdminCredentials();
+  const { username: adminUser, password: adminPass } = getAdminCredentials(c.env);
+
   if (username !== adminUser || password !== adminPass) {
     return c.json({ error: "Invalid credentials" }, 401);
   }
 
   const sessionTtl = getSessionTtlSeconds();
   const now = Math.floor(Date.now() / 1000);
-  const token = await createJWT({ username: adminUser, iat: now, exp: now + sessionTtl });
+  const token = await createJWT({ username: adminUser, iat: now, exp: now + sessionTtl }, c.env);
   return c.json({ token, expiresIn: sessionTtl });
 });
 

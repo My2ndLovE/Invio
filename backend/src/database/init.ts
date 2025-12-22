@@ -3,17 +3,25 @@ import { Database, SQLiteAdapter, D1Adapter } from "./adapter.ts";
 
 let _db: Database | undefined;
 
+// Request-scoped database for Cloudflare Workers (fallback when AsyncLocalStorage unavailable)
+let _requestDb: Database | undefined;
+
 // AsyncLocalStorage to handle request-scoped database on Cloudflare
-// Deno and Cloudflare Workers both support this globally.
 // @ts-ignore: AsyncLocalStorage is global in Workers and Deno
-const storage = new (typeof AsyncLocalStorage !== "undefined" ? AsyncLocalStorage : class {
-  getStore() { return undefined; }
-  run(val: any, fn: any) { return fn(); }
-})<Database>();
+const hasAsyncLocalStorage = typeof AsyncLocalStorage !== "undefined";
+const storage = hasAsyncLocalStorage
+  ? new AsyncLocalStorage<Database>()
+  : null;
 
 export function getDatabase(): Database {
-  const store = (storage as any).getStore();
-  if (store) return store;
+  // Try AsyncLocalStorage first (Deno)
+  if (storage) {
+    const store = storage.getStore();
+    if (store) return store;
+  }
+  // Try request-scoped database (Cloudflare Workers fallback)
+  if (_requestDb) return _requestDb;
+  // Fall back to global database (Deno single-tenant)
   if (!_db) {
     throw new Error("Database not initialized");
   }
@@ -24,8 +32,18 @@ export function setDatabase(db: Database) {
   _db = db;
 }
 
-export const runWithDatabase = (db: Database, fn: () => any) => {
-  return (storage as any).run(db, fn);
+export const runWithDatabase = async (db: Database, fn: () => any) => {
+  if (storage) {
+    return storage.run(db, fn);
+  }
+  // Fallback for Cloudflare Workers: store in module-level variable
+  const prevDb = _requestDb;
+  _requestDb = db;
+  try {
+    return await fn();
+  } finally {
+    _requestDb = prevDb;
+  }
 };
 
 function resolvePath(p: string): string {

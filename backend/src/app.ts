@@ -13,7 +13,15 @@ import { authRoutes } from "./routes/auth.ts";
 import { logChromiumAvailability } from "./utils/chromium.ts";
 import { getEnv } from "./utils/env.ts";
 
-const app = new Hono<{ Bindings: { DB: any } }>();
+interface CloudflareBindings {
+  DB: any;
+  ADMIN_USER?: string;
+  ADMIN_PASS?: string;
+  JWT_SECRET?: string;
+  [key: string]: any;
+}
+
+const app = new Hono<{ Bindings: CloudflareBindings }>();
 
 // Database Initialization Middleware for Cloudflare D1
 app.use("*", async (c, next) => {
@@ -38,10 +46,11 @@ app.use(
   }),
 );
 
-// Routes
-app.route("/api/v1", adminRoutes);
-app.route("/api/v1", publicRoutes);
+// Routes - authRoutes and publicRoutes must come BEFORE adminRoutes
+// because adminRoutes has a wildcard middleware that would catch all requests
 app.route("/api/v1", authRoutes);
+app.route("/api/v1", publicRoutes);
+app.route("/api/v1", adminRoutes);
 
 app.get("/", (c: Context) => c.redirect("/health"));
 app.get("/health", (c: Context) => c.json({ status: "ok" }, 200));

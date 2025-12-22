@@ -12,8 +12,8 @@ function validateSecret(secretKey: string) {
   }
 }
 
-function validateAdminCredentials() {
-  const { username, password } = getAdminCredentials();
+function validateAdminCredentials(env?: Record<string, any>) {
+  const { username, password } = getAdminCredentials(env);
   if (!username || username.trim().length === 0) {
     throw new Error("ADMIN_USER must not be empty");
   }
@@ -22,9 +22,9 @@ function validateAdminCredentials() {
   }
 }
 
-export async function createJWT(payload: Record<string, unknown>) {
-  validateAdminCredentials();
-  const secret = getJwtSecret();
+export async function createJWT(payload: Record<string, unknown>, env?: Record<string, any>) {
+  validateAdminCredentials(env);
+  const secret = getJwtSecret(env);
   validateSecret(secret);
   return await sign(payload, secret, "HS256");
 }
@@ -33,9 +33,9 @@ export async function generateJWT(adminUser: string) {
   return await createJWT({ user: adminUser });
 }
 
-export async function verifyJWT(token: string) {
+export async function verifyJWT(token: string, env?: Record<string, any>) {
   try {
-    const secret = getJwtSecret();
+    const secret = getJwtSecret(env);
     return await verify(token, secret, "HS256");
   } catch (error) {
     console.error("JWT verification failed:", error);

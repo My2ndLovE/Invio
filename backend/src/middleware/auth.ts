@@ -18,11 +18,11 @@ export async function requireAdminAuth(c: Context, next: Next) {
   const token = auth.slice("Bearer ".length).trim();
   if (!token) return unauthorized();
 
-  const payload = await verifyJWT(token);
+  const payload = await verifyJWT(token, c.env);
   if (!payload || typeof payload !== "object") return unauthorized();
 
   const subject = (payload as { username?: string }).username || (payload as { user?: string }).user;
-  const { username: adminUser } = getAdminCredentials();
+  const { username: adminUser } = getAdminCredentials(c.env);
   if (!subject || subject !== adminUser) return unauthorized();
 
   return await next();
