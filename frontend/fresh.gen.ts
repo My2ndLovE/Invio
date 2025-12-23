@@ -33,7 +33,6 @@ import * as $public_invoices_share_token_ubl_xml from "./routes/public/invoices/
 import * as $public_invoices_share_token_xml from "./routes/public/invoices/[share_token]/xml.ts";
 import * as $settings from "./routes/settings.tsx";
 import * as $templates_index from "./routes/templates/index.tsx";
-import * as $Breadcrumbs from "./islands/Breadcrumbs.tsx";
 import * as $ConfirmOnSubmit from "./islands/ConfirmOnSubmit.tsx";
 import * as $CopyPublicLink from "./islands/CopyPublicLink.tsx";
 import * as $DemoModeDisabler from "./islands/DemoModeDisabler.tsx";
@@ -88,7 +87,6 @@ const manifest = {
     "./routes/templates/index.tsx": $templates_index,
   },
   islands: {
-    "./islands/Breadcrumbs.tsx": $Breadcrumbs,
     "./islands/ConfirmOnSubmit.tsx": $ConfirmOnSubmit,
     "./islands/CopyPublicLink.tsx": $CopyPublicLink,
     "./islands/DemoModeDisabler.tsx": $DemoModeDisabler,
