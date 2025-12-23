@@ -8,14 +8,15 @@ interface SettingsNavProps {
 }
 
 export default function SettingsNav({ currentSection, currentLabel, sections }: SettingsNavProps) {
+  const safeSections = sections ?? [];
   return (
     <div class="dropdown dropdown-bottom w-full">
       <div tabIndex={0} role="button" class="btn btn-outline w-full justify-between">
-        <span>{currentLabel}</span>
+        <span>{currentLabel || "Menu"}</span>
         <LuChevronDown size={18} />
       </div>
       <ul tabIndex={0} class="dropdown-content menu bg-base-100 rounded-box z-[1] w-full p-2 shadow-lg border border-base-300 mt-2">
-        {sections.filter(s => s.show !== false).map((section) => {
+        {safeSections.filter(s => s.show !== false).map((section) => {
           const Icon = section.icon;
           return (
             <li>

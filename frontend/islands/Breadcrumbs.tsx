@@ -56,7 +56,7 @@ export default function Breadcrumbs() {
     }
   }, [path, t]);
 
-  if (!crumbs.length) return null;
+  if (!crumbs || crumbs.length === 0) return null;
 
   return (
     <div class="breadcrumbs text-sm mb-4">
