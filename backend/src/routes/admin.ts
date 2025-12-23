@@ -162,8 +162,37 @@ adminRoutes.put("/settings", async (c) => {
   return c.json(settings);
 });
 
+adminRoutes.patch("/settings", async (c) => {
+  const data = await c.req.json();
+  const settings = await updateSettings(data);
+  if (data.templateId) await setDefaultTemplate(data.templateId);
+  return c.json(settings);
+});
+
 adminRoutes.get("/customers", async (c) => {
   return c.json(await getCustomers());
+});
+
+adminRoutes.post("/customers", async (c) => {
+  const data = await c.req.json();
+  try {
+    const customer = await createCustomer(data);
+    return c.json(customer);
+  } catch (e) {
+    return c.json({ error: String(e) }, 400);
+  }
+});
+
+adminRoutes.get("/customers/:id", async (c) => {
+  const customer = await getCustomerById(c.req.param("id"));
+  if (!customer) return c.json({ error: "Customer not found" }, 404);
+  return c.json(customer);
+});
+
+adminRoutes.put("/customers/:id", async (c) => {
+  const customer = await updateCustomer(c.req.param("id"), await c.req.json());
+  if (!customer) return c.json({ error: "Customer not found" }, 404);
+  return c.json(customer);
 });
 
 adminRoutes.delete("/customers/:id", async (c) => {

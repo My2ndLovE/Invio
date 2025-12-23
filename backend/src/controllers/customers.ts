@@ -5,7 +5,8 @@ import {
 } from "../types/index.ts";
 import { generateUUID } from "../utils/uuid.ts";
 
-const mapRowToCustomer = (row: any): Customer => ({
+// Map row with all columns (including contact_name, city, postal_code)
+const mapRowFull = (row: any): Customer => ({
   id: row[0] as string,
   name: row[1] as string,
   contactName: (row[2] ?? undefined) as string | undefined,
@@ -15,55 +16,88 @@ const mapRowToCustomer = (row: any): Customer => ({
   countryCode: (row[6] ?? undefined) as string | undefined,
   taxId: (row[7] ?? undefined) as string | undefined,
   createdAt: new Date(row[8] as string),
-  // Optional city/postal_code columns if present at the end
   city: (row[9] ?? undefined) as string | undefined,
   postalCode: (row[10] ?? undefined) as string | undefined,
 });
 
+// Map row without contact_name column (city, postal_code present)
+const mapRowNoContact = (row: any): Customer => ({
+  id: row[0] as string,
+  name: row[1] as string,
+  contactName: undefined,
+  email: (row[2] ?? undefined) as string | undefined,
+  phone: (row[3] ?? undefined) as string | undefined,
+  address: (row[4] ?? undefined) as string | undefined,
+  countryCode: (row[5] ?? undefined) as string | undefined,
+  taxId: (row[6] ?? undefined) as string | undefined,
+  createdAt: new Date(row[7] as string),
+  city: (row[8] ?? undefined) as string | undefined,
+  postalCode: (row[9] ?? undefined) as string | undefined,
+});
+
+// Map row without contact_name, city, postal_code columns (minimal)
+const mapRowMinimal = (row: any): Customer => ({
+  id: row[0] as string,
+  name: row[1] as string,
+  contactName: undefined,
+  email: (row[2] ?? undefined) as string | undefined,
+  phone: (row[3] ?? undefined) as string | undefined,
+  address: (row[4] ?? undefined) as string | undefined,
+  countryCode: (row[5] ?? undefined) as string | undefined,
+  taxId: (row[6] ?? undefined) as string | undefined,
+  createdAt: new Date(row[7] as string),
+  city: undefined,
+  postalCode: undefined,
+});
+
 export const getCustomers = async (): Promise<Customer[]> => {
   const db = getDatabase();
-  let results: any[][] = [];
   try {
-    results = await db.query(
+    const results = await db.query(
       "SELECT id, name, contact_name, email, phone, address, country_code, tax_id, created_at, city, postal_code FROM customers ORDER BY created_at DESC",
     ) as any[][];
+    return results.map((row: any) => mapRowFull(row));
   } catch (_e) {
     try {
-      results = await db.query(
+      const results = await db.query(
         "SELECT id, name, email, phone, address, country_code, tax_id, created_at, city, postal_code FROM customers ORDER BY created_at DESC",
       ) as any[][];
+      return results.map((row: any) => mapRowNoContact(row));
     } catch (_e2) {
-      results = await db.query(
+      const results = await db.query(
         "SELECT id, name, email, phone, address, country_code, tax_id, created_at FROM customers ORDER BY created_at DESC",
       ) as any[][];
+      return results.map((row: any) => mapRowMinimal(row));
     }
   }
-  return results.map((row: any) => mapRowToCustomer(row));
 };
 
 export const getCustomerById = async (id: string): Promise<Customer | null> => {
   const db = getDatabase();
-  let results: any[][] = [];
   try {
-    results = await db.query(
+    const results = await db.query(
       "SELECT id, name, contact_name, email, phone, address, country_code, tax_id, created_at, city, postal_code FROM customers WHERE id = ?",
       [id],
     ) as any[][];
+    if (results.length === 0) return null;
+    return mapRowFull(results[0]);
   } catch (_e) {
     try {
-      results = await db.query(
+      const results = await db.query(
         "SELECT id, name, email, phone, address, country_code, tax_id, created_at, city, postal_code FROM customers WHERE id = ?",
         [id],
       ) as any[][];
+      if (results.length === 0) return null;
+      return mapRowNoContact(results[0]);
     } catch (_e2) {
-      results = await db.query(
+      const results = await db.query(
         "SELECT id, name, email, phone, address, country_code, tax_id, created_at FROM customers WHERE id = ?",
         [id],
       ) as any[][];
+      if (results.length === 0) return null;
+      return mapRowMinimal(results[0]);
     }
   }
-  if (results.length === 0) return null;
-  return mapRowToCustomer(results[0]);
 };
 
 const toNullable = (v?: string): string | null => {
@@ -76,6 +110,7 @@ export const createCustomer = async (data: CreateCustomerRequest): Promise<Custo
   const db = getDatabase();
   const customerId = generateUUID();
   const now = new Date();
+  const nowIso = now.toISOString();
 
   const contactName = toNullable(data.contactName);
   const email = toNullable(data.email);
@@ -92,7 +127,7 @@ export const createCustomer = async (data: CreateCustomerRequest): Promise<Custo
       INSERT INTO customers (id, name, contact_name, email, phone, address, country_code, tax_id, created_at, city, postal_code)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
-      [customerId, data.name, contactName, email, phone, address, countryCode, taxId, now, city, postal],
+      [customerId, data.name, contactName, email, phone, address, countryCode, taxId, nowIso, city, postal],
     );
   } catch (_e) {
     try {
@@ -101,7 +136,7 @@ export const createCustomer = async (data: CreateCustomerRequest): Promise<Custo
         INSERT INTO customers (id, name, email, phone, address, country_code, tax_id, created_at, city, postal_code)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
-        [customerId, data.name, email, phone, address, countryCode, taxId, now, city, postal],
+        [customerId, data.name, email, phone, address, countryCode, taxId, nowIso, city, postal],
       );
     } catch (_e2) {
       await db.query(
@@ -109,7 +144,7 @@ export const createCustomer = async (data: CreateCustomerRequest): Promise<Custo
         INSERT INTO customers (id, name, email, phone, address, country_code, tax_id, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `,
-        [customerId, data.name, email, phone, address, countryCode, taxId, now],
+        [customerId, data.name, email, phone, address, countryCode, taxId, nowIso],
       );
     }
   }

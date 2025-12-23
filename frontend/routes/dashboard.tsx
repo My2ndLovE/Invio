@@ -106,7 +106,9 @@ export const handler: Handlers<Data> = {
 export default function Dashboard(props: PageProps<Data>) {
   const { t, numberFormat } = useTranslations();
   const fmtMoney = (n: number) => {
-    const cur = props.data.money?.currency || "USD";
+    const rawCur = props.data.money?.currency || "USD";
+    // Validate ISO 4217 currency code (3 uppercase letters)
+    const cur = /^[A-Z]{3}$/i.test(rawCur?.trim() || "") ? rawCur.toUpperCase() : "USD";
     try {
       const locale = numberFormat === "period" ? "de-DE" : "en-US";
       return new Intl.NumberFormat(locale, {

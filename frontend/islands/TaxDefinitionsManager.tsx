@@ -16,6 +16,7 @@ type Props = {
 };
 
 export default function TaxDefinitionsManager(props: Props) {
+  const taxDefinitions = props.taxDefinitions ?? [];
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -168,13 +169,13 @@ export default function TaxDefinitionsManager(props: Props) {
       )}
 
       <div class="space-y-2">
-        {props.taxDefinitions.length === 0
+        {taxDefinitions.length === 0
           ? (
             <div class="text-center py-6 text-base-content/60">
               No tax definitions yet.
             </div>
           )
-          : props.taxDefinitions.map((tax) => (
+          : taxDefinitions.map((tax) => (
             <div
               key={tax.id}
               class="flex items-center justify-between p-3 border border-base-300 rounded-box bg-base-100"
