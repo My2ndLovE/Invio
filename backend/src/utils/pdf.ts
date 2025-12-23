@@ -420,8 +420,8 @@ async function tryPuppeteerPdf(html: string, cloudflareBrowser?: any): Promise<U
 
     if (cloudflareBrowser) {
       // Cloudflare Browser Rendering path
-      // Note: We assume the binding has a .launch() method that returns a puppeteer-compatible browser
-      browser = await cloudflareBrowser.launch();
+      // Pass the browser binding to puppeteer.launch() as per Cloudflare docs
+      browser = await puppeteer.launch(cloudflareBrowser);
     } else {
       // Local/Server Deno path
       const { executablePath, channel } = await resolveChromiumLaunchConfig();
