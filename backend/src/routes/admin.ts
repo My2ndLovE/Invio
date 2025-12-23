@@ -201,6 +201,35 @@ adminRoutes.delete("/customers/:id", async (c) => {
 });
 
 // PDF and HTML generation
+adminRoutes.get("/invoices/:id/html", async (c) => {
+  const invoice = await getInvoiceById(c.req.param("id"));
+  if (!invoice) return c.json({ message: "Invoice not found" }, 404);
+
+  const settingsArr = await getSettings();
+  const settings = settingsArr.reduce((acc: any, s) => { acc[s.key] = s.value; return acc; }, {} as any);
+
+  const businessSettings = {
+    companyName: settings.companyName || "Your Company",
+    companyAddress: settings.companyAddress || "",
+    logo: settings.logo || settings.logoUrl,
+    currency: settings.currency || "USD",
+  };
+
+  const html = await buildInvoiceHTML(
+    invoice,
+    businessSettings,
+    settings.templateId,
+    settings.highlight,
+    settings.dateFormat,
+    settings.numberFormat,
+    settings.locale,
+  );
+
+  return new Response(html, {
+    headers: { "Content-Type": "text/html; charset=utf-8" },
+  });
+});
+
 adminRoutes.get("/invoices/:id/pdf", async (c) => {
   const invoice = await getInvoiceById(c.req.param("id"));
   if (!invoice) return c.json({ message: "Invoice not found" }, 404);

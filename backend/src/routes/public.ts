@@ -76,7 +76,7 @@ publicRoutes.get("/public/invoices/:share_token/html", async (c) => {
     currency: settings.currency || "USD",
   };
 
-  const html = buildInvoiceHTML(
+  const html = await buildInvoiceHTML(
     invoice,
     businessSettings,
     settings.templateId,
