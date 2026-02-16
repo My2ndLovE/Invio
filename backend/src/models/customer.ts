@@ -1,4 +1,4 @@
-import { DB } from "sqlite";
+import type { DB } from "sqlite";
 
 export interface Customer {
   id: string;

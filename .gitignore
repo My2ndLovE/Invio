@@ -10,6 +10,9 @@
 # fresh build
 **/_fresh
 
+# wrangler build output
+backend/dist/
+
 .env
 
 /frontend/static/dev

@@ -310,8 +310,10 @@ function cleanupExpiredEntries(): void {
   cleanupStore(ipStore, windowMs);
 }
 
-// Start cleanup interval
-setInterval(cleanupExpiredEntries, CLEANUP_INTERVAL_MS);
+// Start cleanup interval (only in Deno — Workers are stateless, no persistent stores)
+if (typeof Deno !== "undefined") {
+  setInterval(cleanupExpiredEntries, CLEANUP_INTERVAL_MS);
+}
 
 /**
  * Get current store sizes (for monitoring/debugging)

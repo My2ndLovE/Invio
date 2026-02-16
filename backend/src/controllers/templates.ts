@@ -3,7 +3,7 @@ import { Template, TemplateType } from "../types/index.ts";
 import { generateUUID } from "../utils/uuid.ts";
 import { parse as parseYaml } from "yaml";
 import { dirname, isAbsolute, normalize, relative, resolve } from "std/path";
-import { ZipReader } from "https://deno.land/x/zipjs@v2.7.34/index.js";
+// ZipReader imported dynamically below (Deno-only; avoids bundler issues for Workers)
 // Manifest-based installer (MVP): one HTML file + optional fonts (ignored for now)
 
 type ManifestHTML = {
@@ -557,6 +557,8 @@ function assertLocalManifestShape(m: unknown): asserts m is LocalManifest {
 export async function installLocalTemplateFromZip(
   zipData: Uint8Array,
 ): Promise<Template> {
+  // Dynamic import — only used in Deno local mode (Workers doesn't call this path)
+  const { ZipReader } = await import("https://deno.land/x/zipjs@v2.7.34/index.js");
   // Create a blob from the zip data for the ZipReader
   const blob = new Blob([zipData]);
   const zipReader = new ZipReader(blob.stream());

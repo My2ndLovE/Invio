@@ -8,7 +8,13 @@ import {
 } from "pdf-lib";
 import { generateInvoiceXML, XMLProfile } from "./xmlProfiles.ts";
 import { generateZugferdXMP } from "./xmp.ts";
-import { fromFileUrl, join } from "std/path";
+import { join } from "std/path";
+
+// Polyfill for Deno's fromFileUrl — only used in local Deno code paths (Ghostscript)
+function fromFileUrl(url: URL | string): string {
+  const u = typeof url === "string" ? new URL(url) : url;
+  return decodeURIComponent(u.pathname);
+}
 import {
   BusinessSettings,
   InvoiceWithDetails,

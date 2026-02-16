@@ -1,10 +1,11 @@
 name = "invio-backend"
-main = "src/app.ts"
+main = "dist/worker.mjs"
 compatibility_date = "2024-12-18"
 compatibility_flags = [ "nodejs_compat" ]
+no_bundle = true
 
 [build]
-external = ["@cloudflare/puppeteer"]
+command = "npm install && node build.mjs"
 
 [vars]
 # Add your environment variables here

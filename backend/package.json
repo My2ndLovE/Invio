@@ -10,8 +10,10 @@
         "yaml": "^2.4.1",
         "dotenv": "^16.4.5"
     },
+    "type": "module",
     "devDependencies": {
         "@cloudflare/workers-types": "^4.20240320.1",
+        "esbuild": "^0.24.0",
         "wrangler": "^4.56.0"
     }
 }
