@@ -49,7 +49,7 @@ CREATE TABLE invoices (
   issue_date DATE NOT NULL,
   due_date DATE,
   currency TEXT DEFAULT 'USD',
-  status TEXT CHECK(status IN ('draft', 'sent', 'paid', 'overdue')) DEFAULT 'draft',
+  status TEXT CHECK(status IN ('draft', 'published', 'sent', 'paid', 'overdue', 'cancelled')) DEFAULT 'draft',
   
   -- Totals
   subtotal NUMERIC NOT NULL DEFAULT 0,

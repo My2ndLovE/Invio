@@ -55,6 +55,7 @@ app.route("/api/v1", adminRoutes);
 app.get("/", (c: Context) => c.redirect("/health"));
 app.get("/health", (c: Context) => c.json({ status: "ok" }, 200));
 
+
 // Deno startup
 if (import.meta.main) {
   try {
