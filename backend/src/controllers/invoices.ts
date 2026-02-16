@@ -255,9 +255,106 @@ export const deleteInvoice = async (id: string) => {
 };
 
 export const updateInvoice = async (id: string, data: UpdateInvoiceRequest) => {
-  // Simplified update logic for brevity, ideally it should re-calculate totals
   const db = getDatabase();
-  await db.execute("UPDATE invoices SET status = ? WHERE id = ?", [data.status, id]);
+
+  const existing = await getInvoiceById(id);
+  if (!existing) throw new Error("Invoice not found");
+
+  // If only status is provided (no items), do a simple status update
+  if (!data.items || data.items.length === 0) {
+    if (data.status) {
+      await db.execute("UPDATE invoices SET status = ?, updated_at = ? WHERE id = ?", [data.status, new Date().toISOString(), id]);
+    }
+    return await getInvoiceById(id);
+  }
+
+  // Full update: recalculate totals from items
+  const settingsArr = await getSettings();
+  const settings = settingsArr.reduce((acc: any, s) => { acc[s.key] = s.value; return acc; }, {} as any);
+
+  const defaultPricesIncludeTax = String(settings.defaultPricesIncludeTax || "false").toLowerCase() === "true";
+  const defaultRoundingMode = String(settings.defaultRoundingMode || "line");
+  const defaultTaxRate = Number(settings.defaultTaxRate || 0) || 0;
+
+  const hasPerLineTaxes = data.items.some((i: any) => Array.isArray(i.taxes) && i.taxes.length > 0);
+  let totals = { subtotal: 0, discountAmount: 0, taxAmount: 0, total: 0 };
+  let perLineCalc: PerLineCalc | undefined = undefined;
+
+  if (hasPerLineTaxes) {
+    perLineCalc = calculatePerLineTotals(data.items as any, data.discountPercentage || 0, data.discountAmount || 0, data.pricesIncludeTax ?? defaultPricesIncludeTax, (data.roundingMode || defaultRoundingMode) as any);
+    totals = { subtotal: perLineCalc.subtotal, discountAmount: perLineCalc.discountAmount, taxAmount: perLineCalc.taxAmount, total: perLineCalc.total };
+  } else {
+    totals = calculateInvoiceTotals(data.items, data.discountPercentage || 0, data.discountAmount || 0, (typeof data.taxRate === "number" ? data.taxRate : defaultTaxRate), data.pricesIncludeTax ?? defaultPricesIncludeTax, (data.roundingMode || defaultRoundingMode) as any);
+  }
+
+  const now = new Date();
+  const invoiceNumber = data.invoiceNumber || existing.invoiceNumber;
+  if (data.invoiceNumber && data.invoiceNumber !== existing.invoiceNumber) {
+    const dup = await db.query("SELECT 1 FROM invoices WHERE invoice_number = ? AND id != ? LIMIT 1", [data.invoiceNumber, id]);
+    if (dup.length > 0) throw new Error("Invoice number already exists");
+  }
+
+  await db.execute(
+    `UPDATE invoices SET invoice_number = ?, issue_date = ?, due_date = ?, currency = ?, status = ?, subtotal = ?, discount_amount = ?, discount_percentage = ?, tax_rate = ?, tax_amount = ?, total = ?, payment_terms = ?, notes = ?, updated_at = ?, prices_include_tax = ?, rounding_mode = ? WHERE id = ?`,
+    [
+      invoiceNumber,
+      data.issueDate ? new Date(data.issueDate).toISOString() : existing.issueDate.toISOString(),
+      data.dueDate ? new Date(data.dueDate).toISOString() : (existing.dueDate?.toISOString() ?? null),
+      data.currency || existing.currency,
+      data.status || existing.status,
+      totals.subtotal,
+      totals.discountAmount,
+      data.discountPercentage || 0,
+      hasPerLineTaxes ? 0 : (data.taxRate || 0),
+      totals.taxAmount,
+      totals.total,
+      data.paymentTerms ?? existing.paymentTerms,
+      data.notes ?? existing.notes,
+      now.toISOString(),
+      (data.pricesIncludeTax ?? existing.pricesIncludeTax) ? 1 : 0,
+      data.roundingMode || existing.roundingMode || "line",
+      id,
+    ],
+  );
+
+  // Delete old items (cascade deletes invoice_item_taxes too)
+  await db.execute("DELETE FROM invoice_items WHERE invoice_id = ?", [id]);
+  // Delete old invoice-level taxes
+  await db.execute("DELETE FROM invoice_taxes WHERE invoice_id = ?", [id]);
+
+  // Re-insert items
+  const items: InvoiceItem[] = [];
+  for (let i = 0; i < data.items.length; i++) {
+    const item = data.items[i];
+    const itemId = generateUUID();
+    const lineTotal = item.quantity * item.unitPrice;
+    const invItem: InvoiceItem = { id: itemId, invoiceId: id, description: item.description, quantity: item.quantity, unitPrice: item.unitPrice, lineTotal, notes: item.notes, sortOrder: i };
+    await db.execute(`INSERT INTO invoice_items (id, invoice_id, description, quantity, unit_price, line_total, notes, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [itemId, id, item.description, item.quantity, item.unitPrice, lineTotal, item.notes, i]);
+    items.push(invItem);
+
+    if (hasPerLineTaxes && perLineCalc) {
+      const calc = perLineCalc.perItem[i];
+      if (calc && Array.isArray((item as any).taxes)) {
+        for (const t of calc.taxes) {
+          await db.execute(`INSERT INTO invoice_item_taxes (id, invoice_item_id, tax_definition_id, percent, taxable_amount, amount, included, sequence, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [generateUUID(), itemId, t.taxDefinitionId || null, t.percent, calc.taxable, t.amount, (data.pricesIncludeTax ?? defaultPricesIncludeTax) ? 1 : 0, 0, t.note || null, now.toISOString()]);
+        }
+      }
+    }
+  }
+
+  if (hasPerLineTaxes && perLineCalc) {
+    for (const s of perLineCalc.summary) {
+      await db.execute(`INSERT INTO invoice_taxes (id, invoice_id, tax_definition_id, percent, taxable_amount, tax_amount, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`, [generateUUID(), id, null, s.percent, s.taxable, s.amount, now.toISOString()]);
+    }
+  } else if ((data as any).taxDefinitionId) {
+    const percent = hasPerLineTaxes ? 0 : (data.taxRate || 0);
+    const rate = percent / 100;
+    const afterDiscount = totals.subtotal - totals.discountAmount;
+    const pit = data.pricesIncludeTax ?? defaultPricesIncludeTax;
+    const taxable = pit ? (rate > 0 ? afterDiscount / (1 + rate) : afterDiscount) : afterDiscount;
+    await db.execute(`INSERT INTO invoice_taxes (id, invoice_id, tax_definition_id, percent, taxable_amount, tax_amount, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`, [generateUUID(), id, (data as any).taxDefinitionId, percent, taxable, totals.taxAmount, now.toISOString()]);
+  }
+
   return await getInvoiceById(id);
 };
 
