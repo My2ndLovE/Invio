@@ -226,12 +226,14 @@ export const getInvoiceById = async (id: string): Promise<InvoiceWithDetails | n
   const itemsResult = await db.query(`SELECT id, invoice_id, description, quantity, unit_price, line_total, notes, sort_order FROM invoice_items WHERE invoice_id = ? ORDER BY sort_order`, [id]);
   const items = itemsResult.map((row: any) => ({ id: row[0], invoiceId: row[1], description: row[2], quantity: row[3], unitPrice: row[4], lineTotal: row[5], notes: row[6], sortOrder: row[7] }));
 
-  const taxRows = await db.query(`SELECT invoice_item_id, tax_definition_id, percent, taxable_amount, amount, included, note FROM invoice_item_taxes WHERE invoice_item_id IN (${items.map(() => "?").join(",")})`, items.map(it => it.id));
   const taxesByItem = new Map();
-  for (const r of taxRows) {
-    const itemId = String((r as any)[0]);
-    if (!taxesByItem.has(itemId)) taxesByItem.set(itemId, []);
-    taxesByItem.get(itemId).push({ taxDefinitionId: (r as any)[1], percent: (r as any)[2], taxableAmount: (r as any)[3], amount: (r as any)[4], included: Boolean((r as any)[5]), note: (r as any)[6] });
+  if (items.length > 0) {
+    const taxRows = await db.query(`SELECT invoice_item_id, tax_definition_id, percent, taxable_amount, amount, included, note FROM invoice_item_taxes WHERE invoice_item_id IN (${items.map(() => "?").join(",")})`, items.map(it => it.id));
+    for (const r of taxRows) {
+      const itemId = String((r as any)[0]);
+      if (!taxesByItem.has(itemId)) taxesByItem.set(itemId, []);
+      taxesByItem.get(itemId).push({ taxDefinitionId: (r as any)[1], percent: (r as any)[2], taxableAmount: (r as any)[3], amount: (r as any)[4], included: Boolean((r as any)[5]), note: (r as any)[6] });
+    }
   }
 
   const invTaxRows = await db.query(`SELECT id, invoice_id, tax_definition_id, percent, taxable_amount, tax_amount FROM invoice_taxes WHERE invoice_id = ?`, [id]);
