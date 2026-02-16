@@ -83,7 +83,11 @@ export async function backendPost(
     },
     body: JSON.stringify(body ?? {}),
   });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (!res.ok) {
+    let detail = "";
+    try { const b = await res.json(); detail = b?.error || b?.message || ""; } catch { /* ignore */ }
+    throw new Error(`${res.status} ${res.statusText}${detail ? `: ${detail}` : ""}`);
+  }
   return await res.json();
 }
 

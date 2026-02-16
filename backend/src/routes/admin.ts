@@ -287,7 +287,10 @@ adminRoutes.post("/invoices/:id/publish", async (c) => {
     const result = await publishInvoice(id);
     return c.json(result);
   } catch (e) {
-    return c.json({ error: String(e) }, 400);
+    const msg = e instanceof Error ? e.message : String(e);
+    const stack = e instanceof Error ? e.stack : undefined;
+    console.error("Publish invoice failed:", msg, stack);
+    return c.json({ error: msg, details: stack }, 400);
   }
 });
 
