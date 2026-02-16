@@ -4,9 +4,13 @@ export const BACKEND_URL = Deno.env.get("BACKEND_URL") ||
 const SESSION_COOKIE = "invio_session";
 const DEFAULT_SESSION_MAX_AGE = Math.max(
   300,
-  Math.min(60 * 60 * 12, parseInt(Deno.env.get("SESSION_TTL_SECONDS") || "3600", 10) || 3600),
+  Math.min(
+    60 * 60 * 12,
+    parseInt(Deno.env.get("SESSION_TTL_SECONDS") || "3600", 10) || 3600,
+  ),
 );
-const COOKIE_SECURE = (Deno.env.get("COOKIE_SECURE") || "true").toLowerCase() !== "false";
+const COOKIE_SECURE =
+  (Deno.env.get("COOKIE_SECURE") || "true").toLowerCase() !== "false";
 
 function parseCookies(cookieHeader?: string): Record<string, string> {
   if (!cookieHeader) return {};
@@ -29,7 +33,10 @@ export function getAuthHeaderFromCookie(cookieHeader?: string): string | null {
   return `Bearer ${token}`;
 }
 
-export function setAuthCookieHeaders(token: string, maxAgeSeconds = DEFAULT_SESSION_MAX_AGE): HeadersInit {
+export function setAuthCookieHeaders(
+  token: string,
+  maxAgeSeconds = DEFAULT_SESSION_MAX_AGE,
+): HeadersInit {
   const attrs = [
     `${SESSION_COOKIE}=${encodeURIComponent(token)}`,
     "Path=/",
@@ -126,4 +133,48 @@ export async function backendDelete(path: string, authHeader: string) {
     return undefined;
   }
   return await res.json();
+}
+
+export async function proxyRequest(
+  req: Request,
+  path: string,
+): Promise<Response> {
+  const url = `${BACKEND_URL}${path}`;
+
+  const headers = new Headers();
+  for (const [k, v] of req.headers.entries()) {
+    if (k.toLowerCase() === "host") continue;
+    headers.set(k, v as string);
+  }
+
+  // Ensure Authorization header exists for backend when available via cookie
+  if (!headers.has("authorization")) {
+    const auth = getAuthHeaderFromCookie(
+      req.headers.get("cookie") || undefined,
+    );
+    if (auth) headers.set("authorization", auth);
+  }
+
+  const init: RequestInit = {
+    method: req.method,
+    headers,
+  };
+
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    try {
+      init.body = await req.arrayBuffer();
+    } catch {
+      // ignore — no body
+    }
+  }
+
+  const resp = await fetch(url, init);
+
+  const respHeaders = new Headers(resp.headers);
+  if (!respHeaders.has("content-type")) {
+    respHeaders.set("content-type", "application/json; charset=utf-8");
+  }
+
+  const buffer = await resp.arrayBuffer();
+  return new Response(buffer, { status: resp.status, headers: respHeaders });
 }

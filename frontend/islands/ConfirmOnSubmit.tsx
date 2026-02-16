@@ -10,9 +10,10 @@ export default function ConfirmOnSubmit() {
       if (!target) return;
       const el = target as HTMLElement;
       // Guard: ensure matches exists on the element
-      // deno-lint-ignore no-explicit-any
-      const matches: ((sel: string) => boolean) | undefined = (el as any).matches;
-      if (typeof matches === "function" && matches.call(el, "form[data-confirm]")) {
+      const matches = el.matches ? el.matches.bind(el) : null;
+      if (
+        matches && matches("form[data-confirm]")
+      ) {
         const msg = el.getAttribute("data-confirm") || fallback;
         if (!globalThis.confirm(msg)) {
           e.preventDefault();

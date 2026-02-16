@@ -363,6 +363,7 @@
           <h1 class="company-name">{{companyName}}</h1>
           <div class="company-details">
             {{#companyAddress}}<p>{{companyAddress}}</p>{{/companyAddress}}
+            {{#companyPostalCity}}<p>{{companyPostalCity}}</p>{{/companyPostalCity}}
             {{#companyEmail}}<p>{{companyEmail}}</p>{{/companyEmail}}
             {{#companyPhone}}<p>{{companyPhone}}</p>{{/companyPhone}}
             {{#companyTaxId}}<p>{{labels.taxIdLabel}}: {{companyTaxId}}</p>{{/companyTaxId}}
@@ -381,7 +382,9 @@
           {{#customerEmail}}<p>{{customerEmail}}</p>{{/customerEmail}}
           {{#customerContactName}}<p>{{customerContactName}}</p>{{/customerContactName}}
           {{#customerPhone}}<p>{{customerPhone}}</p>{{/customerPhone}}
-          {{#customerAddress}}<p>{{customerAddress}}</p>{{/customerAddress}}
+          {{#customerAddress}}<p>{{{customerAddress}}}</p>{{/customerAddress}}
+          {{#customerPostalCity}}<p>{{customerPostalCity}}</p>{{/customerPostalCity}}
+          {{#customerCountryCode}}<p>{{customerCountryCode}}</p>{{/customerCountryCode}}
           {{#customerTaxId}}<p>{{labels.taxIdLabel}}: {{customerTaxId}}</p>{{/customerTaxId}}
         </div>
       </div>
@@ -406,8 +409,8 @@
               {{#notes}}<div class="item-notes">{{notes}}</div>{{/notes}}
             </td>
             <td class="quantity">{{quantity}}</td>
-            <td class="unit-price">{{currency}} {{unitPrice}}</td>
-            <td class="line-total">{{currency}} {{lineTotal}}</td>
+            <td class="unit-price">{{unitPrice}}</td>
+            <td class="line-total">{{lineTotal}}</td>
           </tr>
           {{/items}}
         </tbody>
@@ -420,19 +423,19 @@
         <div class="totals-body">
           <div class="totals-row">
             <span class="totals-label">{{labels.subtotalLabel}}:</span>
-            <span class="totals-value">{{currency}} {{subtotal}}</span>
+            <span class="totals-value">{{subtotal}}</span>
           </div>
           {{#hasDiscount}}
           <div class="totals-row">
             <span class="totals-label"
             >{{labels.discountLabel}}
               {{#discountPercentage}}({{discountPercentage}}%){{/discountPercentage}}:</span>
-            <span class="totals-value">-{{currency}} {{discountAmount}}</span>
+            <span class="totals-value">-{{discountAmount}}</span>
           </div>
           {{/hasDiscount}} {{#hasTax}}
           <div class="totals-row">
             <span class="totals-label">{{labels.taxLabel}} ({{taxRate}}%):</span>
-            <span class="totals-value">{{currency}} {{taxAmount}}</span>
+            <span class="totals-value">{{taxAmount}}</span>
           </div>
           {{/hasTax}} {{#hasTaxSummary}}
           <div class="totals-row" style="display:block; padding-top:4px;">
@@ -449,8 +452,8 @@
                 {{#taxSummary}}
                 <tr>
                   <td style="padding:2px 0;">{{label}}</td>
-                  <td style="text-align:right; padding:2px 0;">{{currency}} {{taxable}}</td>
-                  <td style="text-align:right; padding:2px 0;">{{currency}} {{amount}}</td>
+                  <td style="text-align:right; padding:2px 0;">{{taxable}}</td>
+                  <td style="text-align:right; padding:2px 0;">{{amount}}</td>
                 </tr>
                 {{/taxSummary}}
               </tbody>
@@ -459,7 +462,7 @@
           {{/hasTaxSummary}}
           <div class="totals-row total-final">
             <span class="totals-label">{{labels.totalLabel}}:</span>
-            <span class="totals-value">{{currency}} {{total}}</span>
+            <span class="totals-value">{{total}}</span>
           </div>
         </div>
       </div>
@@ -489,7 +492,7 @@
         {{/paymentMethods}} {{#bankAccount}}
         <div class="footer-section">
           <h4>{{labels.bankAccountLabel}}</h4>
-          <p>{{bankAccount}}</p>
+          <p style="white-space: pre-line;">{{bankAccount}}</p>
         </div>
         {{/bankAccount}}
       </div>

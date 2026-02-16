@@ -13,6 +13,20 @@ export interface Customer {
   createdAt: Date;
 }
 
+export interface Product {
+  id: string;
+  name: string;
+  description?: string;
+  unitPrice: number;
+  sku?: string;
+  unit?: string; // piece, hour, day, kg, m, etc.
+  category?: string; // service, goods, subscription, etc.
+  taxDefinitionId?: string;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface Invoice {
   id: string;
   invoiceNumber: string;
@@ -50,6 +64,7 @@ export interface Invoice {
 export interface InvoiceItem {
   id: string;
   invoiceId: string;
+  productId?: string;
   description: string;
   quantity: number;
   unitPrice: number;
@@ -69,11 +84,14 @@ export interface InvoiceAttachment {
   createdAt: Date;
 }
 
+export type TemplateType = "local" | "remote" | "builtin";
+
 export interface Template {
   id: string;
   name: string;
   html: string;
   isDefault: boolean;
+  templateType: TemplateType;
   createdAt: Date;
 }
 
@@ -191,6 +209,16 @@ export interface CreateCustomerRequest {
   taxId?: string;
 }
 
+export interface CreateProductRequest {
+  name: string;
+  description?: string;
+  unitPrice: number;
+  sku?: string;
+  unit?: string;
+  category?: string;
+  taxDefinitionId?: string;
+}
+
 export interface InvoiceWithDetails extends Invoice {
   customer: Customer;
   items: InvoiceItem[];
@@ -205,6 +233,9 @@ export interface TemplateContext {
   // Company info
   companyName: string;
   companyAddress: string;
+  companyCity?: string;
+  companyPostalCode?: string;
+  companyPostalCity?: string;
   companyEmail: string;
   companyPhone: string;
   companyTaxId?: string;
@@ -222,6 +253,10 @@ export interface TemplateContext {
   customerEmail?: string;
   customerPhone?: string;
   customerAddress?: string;
+  customerCity?: string;
+  customerPostalCode?: string;
+  customerCountryCode?: string;
+  customerPostalCity?: string;
   customerTaxId?: string;
 
   // Items

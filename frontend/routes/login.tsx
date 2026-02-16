@@ -1,31 +1,38 @@
-import { Handlers, PageProps } from "$fresh/server.ts";
+import { PageProps } from "fresh";
 import { Layout } from "../components/Layout.tsx";
-import { setAuthCookieHeaders, BACKEND_URL } from "../utils/backend.ts";
+import { BACKEND_URL, setAuthCookieHeaders } from "../utils/backend.ts";
 import { useTranslations } from "../i18n/context.tsx";
+import { Handlers } from "fresh/compat";
 
-type Data = { error: string | null; username?: string; demoMode?: boolean };
+type Data = {
+  error: string | null;
+  errorParams?: Record<string, string | number>;
+  username?: string;
+  demoMode?: boolean;
+};
 
 export const handler: Handlers<Data> = {
-  async GET(_req, ctx) {
+  async GET(_ctx) {
     // Try to fetch public settings to detect demoMode
     try {
       const resp = await fetch(`${BACKEND_URL}/api/v1/demo-mode`);
       if (resp.ok) {
         const body = await resp.json();
         const demoMode = body?.demoMode === true || body?.demoMode === "true";
-        return ctx.render({ error: null, demoMode });
+        return { data: { error: null, demoMode } };
       }
     } catch (_e) {
       // ignore
     }
-    return ctx.render({ error: null });
+    return { data: { error: null } };
   },
-  async POST(req, ctx) {
+  async POST(ctx) {
+    const req = ctx.req;
     const form = await req.formData();
     const username = String(form.get("username") || "");
     const password = String(form.get("password") || "");
     if (!username || !password) {
-      return ctx.render({ error: "Missing credentials", username });
+      return { data: { error: "Missing credentials", username } };
     }
     // Attempt to obtain a short-lived JWT session token from the backend
     try {
@@ -47,27 +54,46 @@ export const handler: Handlers<Data> = {
           }
         }
         if (resp.status === 401) {
-          return ctx.render({ error: "Invalid credentials", username });
+          return { data: { error: "Invalid credentials", username } };
+        }
+        if (resp.status === 429) {
+          // Rate limited - extract retry time if available
+          const retryAfter = (parsedError as { retryAfter?: number })
+            ?.retryAfter;
+          const minutes = retryAfter ? Math.ceil(retryAfter / 60) : 15;
+          return {
+            data: {
+              error:
+                "Too many login attempts. Please try again in {{minutes}} minute(s).",
+              errorParams: { minutes },
+              username,
+            },
+          };
         }
         let message: string | null = null;
         if (parsedError && typeof parsedError === "object") {
-          const candidate = (parsedError as { error?: unknown; message?: unknown }).error ??
-            (parsedError as { error?: unknown; message?: unknown }).message;
+          const candidate =
+            (parsedError as { error?: unknown; message?: unknown }).error ??
+              (parsedError as { error?: unknown; message?: unknown }).message;
           if (typeof candidate === "string" && candidate.trim().length > 0) {
             message = candidate.trim();
           }
-        } else if (typeof parsedError === "string" && parsedError.trim().length > 0) {
+        } else if (
+          typeof parsedError === "string" && parsedError.trim().length > 0
+        ) {
           message = parsedError.trim();
         }
         const msg = message ?? `${resp.status} ${resp.statusText}`;
-        return ctx.render({ error: msg, username });
+        return { data: { error: msg, username } };
       }
       const data = await resp.json() as { token?: string; expiresIn?: number };
       if (!data?.token) {
-        return ctx.render({
-          error: "Login response missing token",
-          username,
-        });
+        return {
+          data: {
+            error: "Login response missing token",
+            username,
+          },
+        };
       }
       const headers = new Headers({
         ...setAuthCookieHeaders(data.token, data.expiresIn),
@@ -77,15 +103,23 @@ export const handler: Handlers<Data> = {
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : String(e);
       if (/401|403/.test(errorMessage)) {
-        return ctx.render({ error: "Invalid credentials", username });
+        return { data: { error: "Invalid credentials", username } };
       }
       if (/5\d\d/.test(errorMessage)) {
-        return ctx.render({ error: "Server error. Please try again later.", username });
+        return {
+          data: {
+            error: "Server error. Please try again later.",
+            username,
+          },
+        };
       }
-      return ctx.render({
-        error: "Unable to connect to server. Please check your connection and try again.",
-        username,
-      });
+      return {
+        data: {
+          error:
+            "Unable to connect to server. Please check your connection and try again.",
+          username,
+        },
+      };
     }
   },
 };
@@ -93,7 +127,8 @@ export const handler: Handlers<Data> = {
 export default function LoginPage(props: PageProps<Data>) {
   const { t } = useTranslations();
   const username = props.data.username || "";
-  const dm = (props.data as unknown as { demoMode?: boolean | string }).demoMode;
+  const dm =
+    (props.data as unknown as { demoMode?: boolean | string }).demoMode;
   const demoMode = dm === true || dm === "true";
   return (
     <Layout path={new URL(props.url).pathname} demoMode={demoMode}>
@@ -110,8 +145,12 @@ export default function LoginPage(props: PageProps<Data>) {
                   <div class="flex flex-col sm:flex-row sm:items-center gap-2">
                     <span class="font-semibold">{t("Demo credentials:")}</span>
                     <div class="flex gap-3 flex-wrap">
-                      <span>{t("username")}: <code>demo</code></span>
-                      <span>{t("password")}: <code>demo</code></span>
+                      <span>
+                        {t("username")}: <code>demo</code>
+                      </span>
+                      <span>
+                        {t("password")}: <code>demo</code>
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -119,7 +158,7 @@ export default function LoginPage(props: PageProps<Data>) {
 
               {props.data.error && (
                 <div class="alert alert-error mb-3">
-                  <span>{t(props.data.error)}</span>
+                  <span>{t(props.data.error, props.data.errorParams)}</span>
                 </div>
               )}
 

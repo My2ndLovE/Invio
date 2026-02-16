@@ -6,10 +6,9 @@ import {
   PDFNumber,
   PDFString,
 } from "pdf-lib";
-// Use Puppeteer (headless Chrome) for HTML -> PDF rendering instead of wkhtmltopdf
-import puppeteer from "@cloudflare/puppeteer";
 import { generateInvoiceXML, XMLProfile } from "./xmlProfiles.ts";
 import { generateZugferdXMP } from "./xmp.ts";
+import { fromFileUrl, join } from "std/path";
 import {
   BusinessSettings,
   InvoiceWithDetails,
@@ -20,7 +19,7 @@ import {
   renderTemplate as renderTpl,
 } from "../controllers/templates.ts";
 import { getDefaultTemplate } from "../controllers/templates.ts";
-import { resolveChromiumLaunchConfig } from "./chromium.ts";
+import { resolveChromiumPath } from "./chromium.ts";
 import { getInvoiceLabels } from "../i18n/translations.ts";
 // pdf-lib is used to embed XML attachments and tweak metadata after rendering
 
@@ -104,7 +103,7 @@ function formatDate(d?: Date, format: string = "YYYY-MM-DD") {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
-
+  
   if (format === "DD.MM.YYYY") {
     return `${day}.${month}.${year}`;
   }
@@ -119,19 +118,11 @@ type WithLogo = BusinessSettings & {
   brandLayout?: string;
 };
 
-// Validate ISO 4217 currency code (3 uppercase letters)
-function isValidCurrencyCode(code: string): boolean {
-  return typeof code === "string" && /^[A-Z]{3}$/i.test(code.trim());
-}
-
 function formatMoney(
   value: number,
   currency: string,
   numberFormat: "comma" | "period" = "comma"
 ): string {
-  // Validate and sanitize currency code
-  const safeCurrency = isValidCurrencyCode(currency) ? currency.toUpperCase() : "USD";
-
   // Create a custom locale based on the number format preference
   let locale: string;
   let options: Intl.NumberFormatOptions;
@@ -139,11 +130,11 @@ function formatMoney(
   if (numberFormat === "period") {
     // European style: 1.000,00
     locale = "de-DE"; // German locale uses period as thousands separator and comma as decimal
-    options = { style: "currency", currency: safeCurrency };
+    options = { style: "currency", currency };
   } else {
     // US style: 1,000.00
     locale = "en-US";
-    options = { style: "currency", currency: safeCurrency };
+    options = { style: "currency", currency };
   }
 
   return new Intl.NumberFormat(locale, options).format(value);
@@ -203,6 +194,13 @@ function buildContext(
   const requestedLocale = localeOverride ?? invoice.locale ?? settings?.locale;
   const { locale: resolvedLocale, labels } = getInvoiceLabels(requestedLocale);
   const currency = invoice.currency || settings?.currency || "USD";
+  const companyPostalCity = (() => {
+    const parts = [
+      (settings?.companyPostalCode || "").trim(),
+      (settings?.companyCity || "").trim(),
+    ].filter(Boolean);
+    return parts.length > 0 ? parts.join(" ") : undefined;
+  })();
   const taxLabel = (settings?.taxLabel && String(settings.taxLabel).trim())
     ? String(settings.taxLabel).trim()
     : labels.taxLabel;
@@ -233,6 +231,9 @@ function buildContext(
     // Company
     companyName: settings?.companyName || "Your Company",
     companyAddress: settings?.companyAddress || "",
+    companyCity: (settings?.companyCity || "").trim() || undefined,
+    companyPostalCode: (settings?.companyPostalCode || "").trim() || undefined,
+    companyPostalCity,
     companyEmail: settings?.companyEmail || "",
     companyPhone: settings?.companyPhone || "",
     companyTaxId: settings?.companyTaxId || "",
@@ -249,7 +250,17 @@ function buildContext(
     customerContactName: invoice.customer.contactName,
     customerEmail: invoice.customer.email,
     customerPhone: invoice.customer.phone,
-    customerAddress: invoice.customer.address,
+    customerAddress: _escapeHtmlWithBreaks(invoice.customer.address),
+    customerCity: invoice.customer.city,
+    customerPostalCode: invoice.customer.postalCode,
+    customerCountryCode: invoice.customer.countryCode,
+    customerPostalCity: (() => {
+      const parts = [
+        (invoice.customer.postalCode || "").trim(),
+        (invoice.customer.city || "").trim(),
+      ].filter(Boolean);
+      return parts.length > 0 ? parts.join(" ") : undefined;
+    })(),
     customerTaxId: invoice.customer.taxId,
 
     // Items
@@ -330,12 +341,24 @@ export async function generateInvoicePDF(
     opts?.numberFormat,
     opts?.locale ?? invoiceData.locale ?? inlined?.locale,
   );
-  // First, attempt Puppeteer-based rendering
-  let pdfBytes = await tryPuppeteerPdf(html, opts?.browser);
-  if (!pdfBytes) {
-    throw new Error(
-      "Chromium-based PDF rendering failed. Install Google Chrome/Chromium or set PUPPETEER_EXECUTABLE_PATH.",
-    );
+
+  // Render HTML to PDF
+  let pdfBytes: Uint8Array;
+  if (opts?.browser) {
+    // Cloudflare Browser Rendering path
+    const result = await tryPuppeteerPdf(html, opts.browser);
+    if (!result) {
+      throw new Error("Cloudflare Browser Rendering PDF generation failed.");
+    }
+    pdfBytes = result;
+  } else {
+    // Local Deno: chrome-headless-shell CLI
+    try {
+      pdfBytes = await renderPdfWithChromeHeadlessShell(html);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`Chrome-headless-shell PDF rendering failed: ${msg}`);
+    }
   }
 
   const pdfaResult = await convertPdfToPdfA3(pdfBytes);
@@ -391,12 +414,13 @@ export async function buildInvoiceHTML(
   const hl = normalizeHex(highlight) || "#2563eb";
   const hlLight = lighten(hl, 0.86);
 
-  let template = null;
+  let template;
   if (templateId) {
     try {
       template = await getTemplateById(templateId);
     } catch (err) {
-      console.warn(`Failed to load template ${templateId}:`, err);
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`Failed to load template ${templateId}: ${message}`);
     }
   }
 
@@ -414,53 +438,104 @@ export async function buildInvoiceHTML(
   });
 }
 
-async function tryPuppeteerPdf(html: string, cloudflareBrowser?: any): Promise<Uint8Array | null> {
+/**
+ * Render HTML to PDF using Cloudflare Browser Rendering (Puppeteer).
+ * Used when running on Cloudflare Workers with a Browser binding.
+ */
+async function tryPuppeteerPdf(html: string, cloudflareBrowser: any): Promise<Uint8Array | null> {
   try {
-    let browser;
-
-    if (cloudflareBrowser) {
-      // Cloudflare Browser Rendering path
-      // Pass the browser binding to puppeteer.launch() as per Cloudflare docs
-      browser = await puppeteer.launch(cloudflareBrowser);
-    } else {
-      // Local/Server Deno path
-      const { executablePath, channel } = await resolveChromiumLaunchConfig();
-      const launchOptions: NonNullable<Parameters<typeof puppeteer.launch>[0]> = {
-        headless: true,
-        args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--font-render-hinting=medium",
-          "--disable-dev-shm-usage",
-        ],
-      };
-
-      if (executablePath) {
-        launchOptions.executablePath = executablePath;
-      } else if (channel) {
-        (launchOptions as { channel?: string }).channel = channel;
-      }
-
-      browser = await puppeteer.launch(launchOptions);
-    }
+    const puppeteer = (await import("@cloudflare/puppeteer")).default;
+    const browser = await puppeteer.launch(cloudflareBrowser);
 
     try {
       const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: "networkidle0", timeout: 30000 });
-      const pdf = await page.pdf({
+      await page.setContent(html, { waitUntil: "networkidle0" });
+      const pdfBuffer = await page.pdf({
         format: "A4",
         printBackground: true,
-        preferCSSPageSize: true,
-        margin: { top: "15mm", bottom: "15mm", left: "15mm", right: "15mm" },
+        margin: { top: "10mm", right: "10mm", bottom: "10mm", left: "10mm" },
       });
-      return new Uint8Array(pdf);
+      return new Uint8Array(pdfBuffer);
     } finally {
       await browser.close();
     }
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.error("Puppeteer PDF render failed:", msg);
+    console.error("Puppeteer PDF rendering failed:", e);
     return null;
+  }
+}
+
+/**
+ * Render HTML to PDF using chrome-headless-shell (or Chrome/Chromium) via
+ * Deno.Command with --print-to-pdf.  This replaces the old Puppeteer approach
+ * and is significantly lighter and faster.
+ */
+async function renderPdfWithChromeHeadlessShell(html: string): Promise<Uint8Array> {
+  const { executablePath } = await resolveChromiumPath();
+  const isLinux = Deno.build.os === "linux";
+
+  // Write the HTML to a temp file so chrome-headless-shell can load it via file:// URL
+  const tmpDir = await Deno.makeTempDir({ prefix: "invio-pdf-" });
+  const htmlPath = join(tmpDir, "invoice.html");
+  const pdfPath = join(tmpDir, "invoice.pdf");
+
+  try {
+    await Deno.writeTextFile(htmlPath, html);
+
+    const fileUrl = new URL(`file://${htmlPath.replace(/\\/g, "/").replace(/^\/*/,"/")}`)
+
+    const args: string[] = [
+      "--headless",
+      "--disable-gpu",
+      "--no-pdf-header-footer",
+      `--print-to-pdf=${pdfPath}`,
+    ];
+
+    if (isLinux) {
+      args.push(
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        `--user-data-dir=${tmpDir}/chrome-profile`,
+      );
+    }
+
+    args.push(fileUrl.href);
+
+    console.log(`[PDF] Running: ${executablePath} ${args.join(" ")}`);
+
+    const cmd = new Deno.Command(executablePath, {
+      args,
+      stdout: "piped",
+      stderr: "piped",
+    });
+
+    // Add a 30-second timeout so a stuck process doesn't hang the request forever
+    const process = cmd.spawn();
+    const timer = setTimeout(() => {
+      try { process.kill(); } catch { /* ignore */ }
+    }, 30_000);
+
+    const { code, stderr } = await process.output();
+    clearTimeout(timer);
+
+    const errMsg = new TextDecoder().decode(stderr);
+    if (errMsg.trim()) {
+      console.log(`[PDF] chrome-headless-shell stderr: ${errMsg.slice(0, 500)}`);
+    }
+    if (code !== 0) {
+      throw new Error(`chrome-headless-shell exited with code ${code}: ${errMsg}`);
+    }
+
+    const pdfBytes = await Deno.readFile(pdfPath);
+    return pdfBytes;
+  } finally {
+    // Clean up temp directory
+    try {
+      await Deno.remove(tmpDir, { recursive: true });
+    } catch {
+      // ignore cleanup errors
+    }
   }
 }
 
@@ -501,13 +576,13 @@ async function convertPdfToPdfA3(pdfBytes: Uint8Array): Promise<Uint8Array | nul
   try {
     await Deno.writeFile(inputPath, pdfBytes);
 
-    // Resolve asset paths
-    // Assuming running from project root or similar structure. 
-    // Best effort to find assets relative to this file or CWD.
-    // In Deno, import.meta.url is reliable.
-    const assetsDir = new URL("../assets/", import.meta.url).pathname;
-    const iccPath = `${assetsDir}AdobeCompat-v2.icc`;
-    const defTemplatePath = `${assetsDir}PDFA_def.ps`;
+    // Resolve asset paths relative to this file.
+    // IMPORTANT: on Windows, `new URL(...).pathname` yields `/C:/...` which isn't a valid FS path.
+    const assetsDir = fromFileUrl(new URL("../assets/", import.meta.url));
+    const iccPathFs = join(assetsDir, "AdobeCompat-v2.icc");
+    const defTemplatePath = join(assetsDir, "PDFA_def.ps");
+    // Ghostscript/PostScript file paths are safest with forward slashes.
+    const iccPath = iccPathFs.replaceAll("\\", "/");
 
     // Read and prepare PDFA_def.ps
     let defContent = await Deno.readTextFile(defTemplatePath);
@@ -529,7 +604,7 @@ async function convertPdfToPdfA3(pdfBytes: Uint8Array): Promise<Uint8Array | nul
       "-dCompressPages=false",
       "-dWriteObjStms=false",
       "-dWriteXRefStm=false",
-      `--permit-file-read=${iccPath}`,
+      `--permit-file-read=${iccPathFs}`,
       `-sOutputFile=${outputPath}`,
       defPath, // The definition file must come before the input file
       inputPath,

@@ -318,6 +318,7 @@
           <h1>{{companyName}}</h1>
           <div class="company-details">
             {{#companyAddress}}<p>{{companyAddress}}</p>{{/companyAddress}}
+            {{#companyPostalCity}}<p>{{companyPostalCity}}</p>{{/companyPostalCity}}
             {{#companyEmail}}<p>{{companyEmail}}</p>{{/companyEmail}}
             {{#companyPhone}}<p>{{companyPhone}}</p>{{/companyPhone}}
             {{#companyTaxId}}<p>{{companyTaxId}}</p>{{/companyTaxId}}
@@ -362,7 +363,9 @@
         {{#customerEmail}}<p>{{customerEmail}}</p>{{/customerEmail}}
         {{#customerContactName}}<p>{{customerContactName}}</p>{{/customerContactName}}
         {{#customerPhone}}<p>{{customerPhone}}</p>{{/customerPhone}}
-        {{#customerAddress}}<p>{{customerAddress}}</p>{{/customerAddress}}
+        {{#customerAddress}}<p>{{{customerAddress}}}</p>{{/customerAddress}}
+        {{#customerPostalCity}}<p>{{customerPostalCity}}</p>{{/customerPostalCity}}
+        {{#customerCountryCode}}<p>{{customerCountryCode}}</p>{{/customerCountryCode}}
   {{#customerTaxId}}<p>{{labels.taxIdLabel}}: {{customerTaxId}}</p>{{/customerTaxId}}
       </div>
     </div>
@@ -385,8 +388,8 @@
               {{#notes}}<div class="item-notes">{{notes}}</div>{{/notes}}
             </td>
             <td>{{quantity}}</td>
-            <td>{{currency}} {{unitPrice}}</td>
-            <td>{{currency}} {{lineTotal}}</td>
+            <td>{{unitPrice}}</td>
+            <td>{{lineTotal}}</td>
           </tr>
           {{/items}}
         </tbody>
@@ -396,18 +399,18 @@
     <div class="totals-section">
       <div class="totals-row subtotal">
         <span>{{labels.subtotalLabel}}</span>
-        <span>{{currency}} {{subtotal}}</span>
+        <span>{{subtotal}}</span>
       </div>
       {{#hasDiscount}}
       <div class="totals-row">
         <span>{{labels.discountLabel}}
           {{#discountPercentage}}({{discountPercentage}}%){{/discountPercentage}}</span>
-        <span>-{{currency}} {{discountAmount}}</span>
+        <span>-{{discountAmount}}</span>
       </div>
       {{/hasDiscount}} {{#hasTax}}
       <div class="totals-row">
         <span>{{labels.taxLabel}} ({{taxRate}}%)</span>
-        <span>{{currency}} {{taxAmount}}</span>
+        <span>{{taxAmount}}</span>
       </div>
       {{/hasTax}} {{#hasTaxSummary}}
       <div class="totals-row" style="display:block; padding-top:4px;">
@@ -425,8 +428,8 @@
               {{#taxSummary}}
               <tr>
                 <td style="padding:2px 0;">{{label}}</td>
-                <td style="text-align:right; padding:2px 0;">{{currency}} {{taxable}}</td>
-                <td style="text-align:right; padding:2px 0;">{{currency}} {{amount}}</td>
+                <td style="text-align:right; padding:2px 0;">{{taxable}}</td>
+                <td style="text-align:right; padding:2px 0;">{{amount}}</td>
               </tr>
               {{/taxSummary}}
             </tbody>
@@ -436,7 +439,7 @@
       {{/hasTaxSummary}}
       <div class="totals-row total">
         <span>{{labels.totalLabel}}</span>
-        <span>{{currency}} {{total}}</span>
+        <span>{{total}}</span>
       </div>
     </div>
 

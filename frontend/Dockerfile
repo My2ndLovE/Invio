@@ -16,8 +16,11 @@ RUN if [ -f /app/VERSION ]; then \
       printf "%s" "${APP_VERSION}" > /app/VERSION; \
     fi
 
-# Cache imports
-RUN deno cache main.ts dev.ts
+# Install npm dependencies for Fresh 2.2.0
+RUN deno install
+
+# Cache imports (update to use vite.config.ts instead of dev.ts)
+RUN deno cache main.ts vite.config.ts
 
 # Build with platform-specific handling
 # Skip build for ARM64 in emulation (causes QEMU issues)
@@ -35,4 +38,4 @@ ENV PORT=8000 \
 EXPOSE 8000
 
 # Run the production preview server
-CMD ["deno", "run", "-A", "main.ts"]
+CMD ["sh", "-c", "deno serve -A --port=$PORT _fresh/server.js"]

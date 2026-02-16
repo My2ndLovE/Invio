@@ -13,6 +13,7 @@ function titleize(slug: string) {
 const LABEL_MAP: Record<string, string> = {
   dashboard: "Dashboard",
   invoices: "Invoices",
+  products: "Products",
   customers: "Customers",
   templates: "Templates",
   settings: "Settings",

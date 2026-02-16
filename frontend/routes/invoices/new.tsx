@@ -1,4 +1,4 @@
-import { Handlers, PageProps } from "$fresh/server.ts";
+import { PageProps } from "fresh";
 import { Layout } from "../../components/Layout.tsx";
 import { InvoiceEditor } from "../../components/InvoiceEditor.tsx";
 import InvoiceFormButton from "../../islands/InvoiceFormButton.tsx";
@@ -9,6 +9,7 @@ import {
   getAuthHeaderFromCookie,
 } from "../../utils/backend.ts";
 import { useTranslations } from "../../i18n/context.tsx";
+import { Handlers } from "fresh/compat";
 
 type Customer = { id: string; name: string };
 type TaxDefinition = {
@@ -18,9 +19,18 @@ type TaxDefinition = {
   percent: number;
   countryCode?: string;
 };
+type Product = {
+  id: string;
+  name: string;
+  description?: string;
+  unitPrice: number;
+  sku?: string;
+  taxDefinitionId?: string;
+};
 type Data = {
   authed: boolean;
   customers?: Customer[];
+  products?: Product[];
   taxDefinitions?: TaxDefinition[];
   currency?: string;
   paymentTerms?: string;
@@ -43,7 +53,8 @@ type Item = {
 };
 
 export const handler: Handlers<Data> = {
-  async GET(req, ctx) {
+  async GET(ctx) {
+    const req = ctx.req;
     const auth = getAuthHeaderFromCookie(
       req.headers.get("cookie") || undefined,
     );
@@ -54,14 +65,23 @@ export const handler: Handlers<Data> = {
       });
     }
     try {
-      // Load customers and settings in parallel to get default currency
-      const [customers, settings, taxDefinitions] = await Promise.all([
-        backendGet("/api/v1/customers", auth) as Promise<Customer[]>,
-        backendGet("/api/v1/settings", auth) as Promise<Record<string, string>>,
-        backendGet("/api/v1/tax-definitions", auth).catch(() => []) as Promise<
-          TaxDefinition[]
-        >,
-      ]);
+      // Load customers, products, and settings in parallel
+      const [customers, products, settings, taxDefinitions] = await Promise.all(
+        [
+          backendGet("/api/v1/customers", auth) as Promise<Customer[]>,
+          backendGet("/api/v1/products", auth).catch(() => []) as Promise<
+            Product[]
+          >,
+          backendGet("/api/v1/settings", auth) as Promise<
+            Record<string, string>
+          >,
+          backendGet("/api/v1/tax-definitions", auth).catch(
+            () => [],
+          ) as Promise<
+            TaxDefinition[]
+          >,
+        ],
+      );
       const currency = (settings && settings.currency)
         ? settings.currency
         : "USD";
@@ -88,24 +108,28 @@ export const handler: Handlers<Data> = {
           if (nextResp && nextResp.next) invoiceNumberPrefill = nextResp.next;
         }
       } catch (_e) { /* ignore prefill failure */ }
-      return ctx.render({
-        authed: true,
-        customers,
-        taxDefinitions,
-        currency,
-        paymentTerms,
-        defaultNotes,
-        defaultTaxRate,
-        defaultPricesIncludeTax,
-        defaultRoundingMode,
-        numberFormat,
-        invoiceNumberPrefill,
-      });
+      return {
+        data: {
+          authed: true,
+          customers,
+          products,
+          taxDefinitions,
+          currency,
+          paymentTerms,
+          defaultNotes,
+          defaultTaxRate,
+          defaultPricesIncludeTax,
+          defaultRoundingMode,
+          numberFormat,
+          invoiceNumberPrefill,
+        },
+      };
     } catch (e) {
-      return ctx.render({ authed: true, error: String(e) });
+      return { data: { authed: true, error: String(e) } };
     }
   },
-  async POST(req, ctx) {
+  async POST(ctx) {
+    const req = ctx.req;
     const auth = getAuthHeaderFromCookie(
       req.headers.get("cookie") || undefined,
     );
@@ -115,8 +139,8 @@ export const handler: Handlers<Data> = {
         headers: { Location: "/login" },
       });
     }
-  const form = await req.formData();
-  let customerId = String(form.get("customerId") || "");
+    const form = await req.formData();
+    let customerId = String(form.get("customerId") || "");
     let currency = String(form.get("currency") || "");
     const status = String(form.get("status") || "draft") as
       | "draft"
@@ -184,14 +208,25 @@ export const handler: Handlers<Data> = {
     }
 
     if (customerId === "__create__") {
-      const inlineCustomerName = String(form.get("inlineCustomerName") || "").trim();
-      const inlineCustomerEmail = String(form.get("inlineCustomerEmail") || "").trim();
-      const inlineCustomerPhone = String(form.get("inlineCustomerPhone") || "").trim();
-      const inlineCustomerAddress = String(form.get("inlineCustomerAddress") || "").trim();
-      const inlineCustomerCity = String(form.get("inlineCustomerCity") || "").trim();
-      const inlineCustomerPostalCode = String(form.get("inlineCustomerPostalCode") || "").trim();
-      const inlineCustomerTaxId = String(form.get("inlineCustomerTaxId") || "").trim();
-      const inlineCustomerCountryCode = String(form.get("inlineCustomerCountryCode") || "").trim();
+      const inlineCustomerName = String(form.get("inlineCustomerName") || "")
+        .trim();
+      const inlineCustomerEmail = String(form.get("inlineCustomerEmail") || "")
+        .trim();
+      const inlineCustomerPhone = String(form.get("inlineCustomerPhone") || "")
+        .trim();
+      const inlineCustomerAddress = String(
+        form.get("inlineCustomerAddress") || "",
+      ).trim();
+      const inlineCustomerCity = String(form.get("inlineCustomerCity") || "")
+        .trim();
+      const inlineCustomerPostalCode = String(
+        form.get("inlineCustomerPostalCode") || "",
+      ).trim();
+      const inlineCustomerTaxId = String(form.get("inlineCustomerTaxId") || "")
+        .trim();
+      const inlineCustomerCountryCode = String(
+        form.get("inlineCustomerCountryCode") || "",
+      ).trim();
 
       if (!inlineCustomerName) {
         return new Response("Customer name is required", { status: 400 });
@@ -282,18 +317,20 @@ export const handler: Handlers<Data> = {
             "true";
         const sDefaultRoundingMode = settings?.defaultRoundingMode || "line";
         const sNumberFormat = settings?.numberFormat || "comma";
-        return ctx.render({
-          authed: true,
-          customers,
-          currency: sCurrency,
-          paymentTerms: sPaymentTerms,
-          defaultNotes: sDefaultNotes,
-          defaultTaxRate: sDefaultTaxRate,
-          defaultPricesIncludeTax: sDefaultPricesIncludeTax,
-          defaultRoundingMode: sDefaultRoundingMode,
-          numberFormat: sNumberFormat,
-          invoiceNumberError: "Invoice number already exists",
-        });
+        return {
+          data: {
+            authed: true,
+            customers,
+            currency: sCurrency,
+            paymentTerms: sPaymentTerms,
+            defaultNotes: sDefaultNotes,
+            defaultTaxRate: sDefaultTaxRate,
+            defaultPricesIncludeTax: sDefaultPricesIncludeTax,
+            defaultRoundingMode: sDefaultRoundingMode,
+            numberFormat: sNumberFormat,
+            invoiceNumberError: "Invoice number already exists",
+          },
+        };
       }
       return new Response(String(e), { status: 500 });
     }
@@ -341,6 +378,7 @@ export default function NewInvoicePage(props: PageProps<Data>) {
         <InvoiceEditor
           mode="create"
           customers={customers}
+          products={props.data.products ?? []}
           taxDefinitions={props.data.taxDefinitions ?? []}
           currency={currency}
           status="draft"

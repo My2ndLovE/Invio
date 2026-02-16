@@ -1,0 +1,44 @@
+name: Check translation files 
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - frontend/i18n/locales/*
+  pull_request:
+    branches: [main]
+    paths:
+      - frontend/i18n/locales/*
+
+jobs:
+  check_translations:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Setup python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13' 
+      - name: Sort translation files by key
+        run: | 
+          cd frontend/i18n/locales 
+          for file in *.json; do
+            jq --sort-keys . "$file" > "$file.tmp" 
+            if ! diff -q "$file" "$file.tmp" > /dev/null; then
+              echo "Sorted $file"
+            fi
+            mv "$file.tmp" "$file"
+          done
+      - name: run check 
+        run: python .github/scripts/translations.py
+      - uses: stefanzweifel/git-auto-commit-action@v7
+        with:
+          commit_message: Update missing translations, sort translations
+          file_pattern: "frontend/i18n/locales/*.json TRANSLATIONS.md"

@@ -39,7 +39,7 @@ function splitAddressLines(address?: string): { lineOne?: string; lineTwo?: stri
   const parts = address.split(/\r?\n/).map((part) => part.trim()).filter((part) => part.length > 0);
   if (parts.length === 0) return {};
   const [lineOne, ...rest] = parts;
-  let lineTwo = rest.length ? rest.join(", ") : undefined;
+  const lineTwo = rest.length ? rest.join(", ") : undefined;
   
   // Simple heuristic: if lineTwo looks like "12345 City", try to extract it
   // This is a fallback if structured city/zip are missing

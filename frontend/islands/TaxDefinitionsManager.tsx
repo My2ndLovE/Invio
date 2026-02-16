@@ -1,5 +1,6 @@
 import { useState } from "preact/hooks";
-import { LuPlus, LuPencil, LuTrash2 } from "../components/icons.tsx";
+import { LuPencil, LuPlus, LuTrash2 } from "../components/icons.tsx";
+import { useTranslations } from "../i18n/context.tsx";
 
 type TaxDefinition = {
   id: string;
@@ -16,7 +17,7 @@ type Props = {
 };
 
 export default function TaxDefinitionsManager(props: Props) {
-  const taxDefinitions = props.taxDefinitions ?? [];
+  const { t } = useTranslations();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -52,7 +53,7 @@ export default function TaxDefinitionsManager(props: Props) {
   return (
     <div class="space-y-4">
       <div class="flex items-center justify-between">
-        <h3 class="text-lg font-semibold">Tax definitions</h3>
+        <h3 class="text-lg font-semibold">{t("Tax Definitions")}</h3>
         <button
           type="button"
           onClick={handleAdd}
@@ -60,14 +61,16 @@ export default function TaxDefinitionsManager(props: Props) {
           disabled={props.demoMode}
         >
           <LuPlus size={16} class="mr-1" />
-          Add tax
+          {t("Add tax")}
         </button>
       </div>
 
       {showForm && (
         <form
           method="post"
-          action={editingId ? `/api/v1/tax-definitions/${editingId}` : "/api/v1/tax-definitions"}
+          action={editingId
+            ? `/api/v1/tax-definitions/${editingId}`
+            : "/api/v1/tax-definitions"}
           class="card bg-base-200 p-4 space-y-3"
         >
           {editingId && <input type="hidden" name="_method" value="PUT" />}
@@ -75,7 +78,7 @@ export default function TaxDefinitionsManager(props: Props) {
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label class="form-control">
               <div class="label">
-                <span class="label-text">Tax code *</span>
+                <span class="label-text">{t("Tax code")} *</span>
               </div>
               <input
                 type="text"
@@ -87,7 +90,7 @@ export default function TaxDefinitionsManager(props: Props) {
                     code: (e.target as HTMLInputElement).value,
                   })}
                 class="input input-bordered w-full"
-                placeholder="e.g., GST, HST, PST"
+                placeholder={t("Tax code placeholder")}
                 required
                 disabled={props.demoMode}
               />
@@ -95,7 +98,7 @@ export default function TaxDefinitionsManager(props: Props) {
 
             <label class="form-control">
               <div class="label">
-                <span class="label-text">Display name *</span>
+                <span class="label-text">{t("Display name")} *</span>
               </div>
               <input
                 type="text"
@@ -107,7 +110,7 @@ export default function TaxDefinitionsManager(props: Props) {
                     name: (e.target as HTMLInputElement).value,
                   })}
                 class="input input-bordered w-full"
-                placeholder="e.g., Goods and Services Tax"
+                placeholder={t("Display name placeholder")}
                 required
                 disabled={props.demoMode}
               />
@@ -117,7 +120,7 @@ export default function TaxDefinitionsManager(props: Props) {
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label class="form-control">
               <div class="label">
-                <span class="label-text">Rate (%) *</span>
+                <span class="label-text">{t("Tax Rate (%)")} *</span>
               </div>
               <input
                 type="number"
@@ -138,7 +141,7 @@ export default function TaxDefinitionsManager(props: Props) {
 
             <label class="form-control">
               <div class="label">
-                <span class="label-text">Country code</span>
+                <span class="label-text">{t("Country code")}</span>
               </div>
               <input
                 type="text"
@@ -150,7 +153,7 @@ export default function TaxDefinitionsManager(props: Props) {
                     countryCode: (e.target as HTMLInputElement).value,
                   })}
                 class="input input-bordered w-full"
-                placeholder="e.g., CA"
+                placeholder={t("Country code placeholder")}
                 maxLength={2}
                 disabled={props.demoMode}
               />
@@ -158,24 +161,28 @@ export default function TaxDefinitionsManager(props: Props) {
           </div>
 
           <div class="flex gap-2">
-            <button type="submit" class="btn btn-primary" disabled={props.demoMode}>
-              {editingId ? "Update" : "Create"}
+            <button
+              type="submit"
+              class="btn btn-primary"
+              disabled={props.demoMode}
+            >
+              {editingId ? t("Update") : t("Create")}
             </button>
             <button type="button" onClick={handleCancel} class="btn btn-ghost">
-              Cancel
+              {t("Cancel")}
             </button>
           </div>
         </form>
       )}
 
       <div class="space-y-2">
-        {taxDefinitions.length === 0
+        {props.taxDefinitions.length === 0
           ? (
             <div class="text-center py-6 text-base-content/60">
-              No tax definitions yet.
+              {t("No tax definitions yet.")}
             </div>
           )
-          : taxDefinitions.map((tax) => (
+          : props.taxDefinitions.map((tax) => (
             <div
               key={tax.id}
               class="flex items-center justify-between p-3 border border-base-300 rounded-box bg-base-100"
@@ -195,7 +202,7 @@ export default function TaxDefinitionsManager(props: Props) {
                   onClick={() => handleEdit(tax)}
                   class="btn btn-sm btn-ghost"
                   disabled={props.demoMode}
-                  title="Edit"
+                  title={t("Edit")}
                 >
                   <LuPencil size={16} />
                 </button>
@@ -203,7 +210,11 @@ export default function TaxDefinitionsManager(props: Props) {
                   method="post"
                   action={`/api/v1/tax-definitions/${tax.id}`}
                   onSubmit={(e) => {
-                    if (!confirm(`Delete ${tax.code}? This cannot be undone.`)) {
+                    if (
+                      !confirm(
+                        t("Delete tax definition confirm", { code: tax.code }),
+                      )
+                    ) {
                       e.preventDefault();
                     }
                   }}
@@ -213,7 +224,7 @@ export default function TaxDefinitionsManager(props: Props) {
                     type="submit"
                     class="btn btn-sm btn-ghost text-error"
                     disabled={props.demoMode}
-                    title="Delete"
+                    title={t("Delete")}
                   >
                     <LuTrash2 size={16} />
                   </button>

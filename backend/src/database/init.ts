@@ -131,8 +131,71 @@ async function ensureTemplateDefaults(database: Database) {
 
 async function ensureSchemaUpgrades(database: Database) {
   try {
-    await database.execute("CREATE TABLE IF NOT EXISTS tax_definitions (id TEXT PRIMARY KEY, code TEXT UNIQUE, name TEXT, percent NUMERIC NOT NULL, category_code TEXT, country_code TEXT, vendor_specific_id TEXT, default_included BOOLEAN DEFAULT 0, metadata TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
-  } catch { /* ignore */ }
+    // Ensure customers columns exist
+    const cols = await database.query("PRAGMA table_info(customers)") as unknown[] as Array<unknown[]>;
+    const names = new Set(cols.map((r) => String(r[1])));
+    for (const col of [
+      { name: "contact_name", sql: "ALTER TABLE customers ADD COLUMN contact_name TEXT" },
+      { name: "country_code", sql: "ALTER TABLE customers ADD COLUMN country_code TEXT" },
+      { name: "city", sql: "ALTER TABLE customers ADD COLUMN city TEXT" },
+      { name: "postal_code", sql: "ALTER TABLE customers ADD COLUMN postal_code TEXT" },
+    ]) {
+      if (!names.has(col.name)) {
+        try { await database.execute(col.sql); } catch { /* ignore duplicates */ }
+      }
+    }
+
+    // Ensure invoices columns exist
+    const invCols = await database.query("PRAGMA table_info(invoices)") as unknown[] as Array<unknown[]>;
+    const invNames = new Set(invCols.map((r) => String(r[1])));
+    if (!invNames.has("prices_include_tax")) {
+      try { await database.execute("ALTER TABLE invoices ADD COLUMN prices_include_tax BOOLEAN DEFAULT 0"); } catch { /* ignore */ }
+    }
+    if (!invNames.has("rounding_mode")) {
+      try { await database.execute("ALTER TABLE invoices ADD COLUMN rounding_mode TEXT DEFAULT 'line'"); } catch { /* ignore */ }
+    }
+
+    // Ensure normalized tax tables exist
+    await database.execute(`CREATE TABLE IF NOT EXISTS tax_definitions (id TEXT PRIMARY KEY, code TEXT UNIQUE, name TEXT, percent NUMERIC NOT NULL, category_code TEXT, country_code TEXT, vendor_specific_id TEXT, default_included BOOLEAN DEFAULT 0, metadata TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
+    await database.execute(`CREATE TABLE IF NOT EXISTS invoice_item_taxes (id TEXT PRIMARY KEY, invoice_item_id TEXT NOT NULL REFERENCES invoice_items(id) ON DELETE CASCADE, tax_definition_id TEXT REFERENCES tax_definitions(id), percent NUMERIC NOT NULL, taxable_amount NUMERIC NOT NULL, amount NUMERIC NOT NULL, included BOOLEAN NOT NULL DEFAULT 0, sequence INTEGER DEFAULT 0, note TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
+    await database.execute(`CREATE TABLE IF NOT EXISTS invoice_taxes (id TEXT PRIMARY KEY, invoice_id TEXT NOT NULL REFERENCES invoices(id) ON DELETE CASCADE, tax_definition_id TEXT REFERENCES tax_definitions(id), percent NUMERIC NOT NULL, taxable_amount NUMERIC NOT NULL, tax_amount NUMERIC NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
+
+    // Ensure products table exists
+    await database.execute(`CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT, unit_price NUMERIC NOT NULL DEFAULT 0, sku TEXT, unit TEXT DEFAULT 'piece', category TEXT, tax_definition_id TEXT REFERENCES tax_definitions(id), is_active BOOLEAN DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
+    await database.execute(`CREATE TABLE IF NOT EXISTS product_categories (id TEXT PRIMARY KEY, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL, sort_order INTEGER DEFAULT 0, is_builtin BOOLEAN DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
+    await database.execute(`CREATE TABLE IF NOT EXISTS product_units (id TEXT PRIMARY KEY, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL, sort_order INTEGER DEFAULT 0, is_builtin BOOLEAN DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
+
+    // Insert default categories
+    for (const cat of [
+      { code: "service", name: "Service", sort: 1 },
+      { code: "goods", name: "Goods", sort: 2 },
+      { code: "subscription", name: "Subscription", sort: 3 },
+      { code: "other", name: "Other", sort: 4 },
+    ]) {
+      try { await database.query("INSERT OR IGNORE INTO product_categories (id, code, name, sort_order, is_builtin) VALUES (?, ?, ?, ?, 1)", [cat.code, cat.code, cat.name, cat.sort]); } catch { /* ignore */ }
+    }
+
+    // Insert default units
+    for (const unit of [
+      { code: "piece", name: "Piece", sort: 1 },
+      { code: "hour", name: "Hour", sort: 2 },
+      { code: "day", name: "Day", sort: 3 },
+      { code: "kg", name: "Kilogram", sort: 4 },
+      { code: "m", name: "Meter", sort: 5 },
+      { code: "lump_sum", name: "Lump Sum", sort: 6 },
+    ]) {
+      try { await database.query("INSERT OR IGNORE INTO product_units (id, code, name, sort_order, is_builtin) VALUES (?, ?, ?, ?, 1)", [unit.code, unit.code, unit.name, unit.sort]); } catch { /* ignore */ }
+    }
+
+    // Ensure invoice_items.product_id exists
+    const itemCols = await database.query("PRAGMA table_info(invoice_items)") as unknown[] as Array<unknown[]>;
+    const itemColNames = new Set(itemCols.map((r) => String(r[1])));
+    if (!itemColNames.has("product_id")) {
+      try { await database.execute("ALTER TABLE invoice_items ADD COLUMN product_id TEXT REFERENCES products(id)"); } catch { /* ignore */ }
+    }
+  } catch (e) {
+    console.warn("Schema upgrade check failed:", e);
+  }
 }
 
 export async function getNextInvoiceNumber(): Promise<string> {

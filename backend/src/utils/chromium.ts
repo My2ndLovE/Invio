@@ -1,32 +1,26 @@
+// chrome-headless-shell candidates per platform
 const UNIX_CANDIDATES = [
-  "/usr/bin/google-chrome-stable",
-  "/usr/bin/google-chrome",
-  "/usr/bin/chromium",
-  "/usr/bin/chromium-browser",
-  "/usr/bin/chrome",
+  "/usr/local/bin/chrome-headless-shell",
+  "/usr/bin/chrome-headless-shell",
 ];
 
 const MAC_CANDIDATES = [
-  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-  "/Applications/Chromium.app/Contents/MacOS/Chromium",
-  "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+  "/Applications/chrome-headless-shell",
 ];
 
 const WINDOWS_CANDIDATES = [
-  "C:/Program Files/Google/Chrome/Application/chrome.exe",
-  "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
-  "C:/Program Files/Chromium/Application/chrome.exe",
-  "C:/Program Files/Microsoft/Edge/Application/msedge.exe",
+  "C:/Program Files/chrome-headless-shell/chrome-headless-shell.exe",
+  "C:/Program Files (x86)/chrome-headless-shell/chrome-headless-shell.exe",
 ];
 
 function candidatePaths(): string[] {
-  // Gracefully handle non-Deno environments
+  // Gracefully handle non-Deno environments (e.g. Cloudflare Workers)
   if (typeof Deno === "undefined") return [];
 
-  const envPath = Deno.env.get("PUPPETEER_EXECUTABLE_PATH");
+  const envShell = Deno.env.get("CHROME_HEADLESS_SHELL_PATH");
   const list: string[] = [];
-  if (envPath && envPath.trim()) {
-    list.push(envPath.trim());
+  if (envShell && envShell.trim()) {
+    list.push(envShell.trim());
   }
 
   const platform = Deno.build.os;
@@ -50,7 +44,7 @@ async function fileExists(path: string): Promise<boolean> {
   }
 }
 
-export async function findChromiumExecutable(candidates = candidatePaths()): Promise<string | undefined> {
+export async function findHeadlessShell(candidates = candidatePaths()): Promise<string | undefined> {
   for (const candidate of candidates) {
     if (await fileExists(candidate)) {
       return candidate;
@@ -59,27 +53,30 @@ export async function findChromiumExecutable(candidates = candidatePaths()): Pro
   return undefined;
 }
 
-export async function resolveChromiumLaunchConfig(): Promise<{ executablePath?: string; channel?: string; candidates: string[] }> {
+export async function resolveChromiumPath(): Promise<{ executablePath: string; candidates: string[] }> {
   const candidates = candidatePaths();
-  const executablePath = await findChromiumExecutable(candidates);
+  const executablePath = await findHeadlessShell(candidates);
   if (executablePath) {
     return { executablePath, candidates };
   }
-  const channel = (typeof Deno !== "undefined" ? Deno.env.get("PUPPETEER_CHANNEL") : undefined)?.trim() || "chrome";
-  return { channel, candidates };
+  throw new Error(
+    "No chrome-headless-shell executable found. " +
+    "Set CHROME_HEADLESS_SHELL_PATH to the binary path. Checked: " +
+    candidates.join(", "),
+  );
 }
 
 export async function logChromiumAvailability(): Promise<void> {
-  if (typeof Deno === "undefined") {
-    console.log("Running in non-Deno environment. Skipping Chromium check.");
-    return;
+  try {
+    const { executablePath } = await resolveChromiumPath();
+    console.log(`chrome-headless-shell detected at ${executablePath}`);
+  } catch {
+    const candidates = candidatePaths();
+    console.error(
+      "⚠️  No chrome-headless-shell executable detected. " +
+      "PDF generation requires chrome-headless-shell. " +
+      "Set CHROME_HEADLESS_SHELL_PATH. Checked paths: " +
+        candidates.join(", "),
+    );
   }
-  const { executablePath, candidates } = await resolveChromiumLaunchConfig();
-  if (executablePath) {
-    console.log(`Chromium executable detected at ${executablePath}`);
-    return;
-  }
-  console.warn(
-    "⚠️  No Chromium executable detected. PDF generation requires Google Chrome, Chromium, or setting PUPPETEER_EXECUTABLE_PATH.",
-  );
 }

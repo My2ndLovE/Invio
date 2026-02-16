@@ -17,3 +17,6 @@
 
 /Invio.wiki
 .DS_Store
+
+# Development documentation (internal use only)
+.coding/

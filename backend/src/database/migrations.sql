@@ -98,10 +98,14 @@ CREATE TABLE templates (
   name TEXT NOT NULL,
   html TEXT NOT NULL,
   is_default BOOLEAN DEFAULT FALSE,
+  template_type TEXT DEFAULT 'builtin',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- No built-in default template is seeded here; startup code installs maintained templates.
+
+-- Add template_type column if not exists (for existing databases)
+ALTER TABLE templates ADD COLUMN template_type TEXT DEFAULT 'builtin';
 
 -- Index for performance
 CREATE INDEX idx_invoices_number ON invoices(invoice_number);
@@ -151,3 +155,25 @@ CREATE TABLE IF NOT EXISTS invoice_taxes (
 -- Invoice-level flags for tax pricing/rounding
 ALTER TABLE invoices ADD COLUMN prices_include_tax BOOLEAN DEFAULT 0;
 ALTER TABLE invoices ADD COLUMN rounding_mode TEXT DEFAULT 'line';
+
+-- Products table for reusable invoice items
+CREATE TABLE IF NOT EXISTS products (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  unit_price NUMERIC NOT NULL DEFAULT 0,
+  sku TEXT,
+  unit TEXT DEFAULT 'piece',
+  category TEXT,
+  tax_definition_id TEXT REFERENCES tax_definitions(id),
+  is_active BOOLEAN DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
+CREATE INDEX IF NOT EXISTS idx_products_active ON products(is_active);
+CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
+
+-- Link invoice items to products (optional reference)
+ALTER TABLE invoice_items ADD COLUMN product_id TEXT REFERENCES products(id);

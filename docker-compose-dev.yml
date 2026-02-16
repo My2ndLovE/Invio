@@ -3,6 +3,7 @@ name: invio-dev
 services:
   backend:
     build: ./backend  # Build from local backend/ directory
+    shm_size: '256mb'
     env_file:
       - .env
     environment:
@@ -32,6 +33,8 @@ services:
     ports:
       - "${FRONTEND_PORT:-8000}:${FRONTEND_PORT_INTERNAL:-8000}"
     restart: unless-stopped
+    # Use Fresh 2.x dev mode (Vite-based)
+    command: ["sh", "-c", "deno task dev"]
 
 volumes:
   invio_data:

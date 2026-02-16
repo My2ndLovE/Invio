@@ -1,4 +1,4 @@
-import { Handlers, PageProps } from "$fresh/server.ts";
+import { PageProps } from "fresh";
 import { Layout } from "../../../components/Layout.tsx";
 import { InvoiceEditor } from "../../../components/InvoiceEditor.tsx";
 import InvoiceFormButton from "../../../islands/InvoiceFormButton.tsx";
@@ -8,6 +8,7 @@ import {
   getAuthHeaderFromCookie,
 } from "../../../utils/backend.ts";
 import { useTranslations } from "../../../i18n/context.tsx";
+import { Handlers } from "fresh/compat";
 
 type Item = {
   description: string;
@@ -22,6 +23,14 @@ type TaxDefinition = {
   name?: string;
   percent: number;
   countryCode?: string;
+};
+type Product = {
+  id: string;
+  name: string;
+  description?: string;
+  unitPrice: number;
+  sku?: string;
+  taxDefinitionId?: string;
 };
 type Invoice = {
   id: string;
@@ -42,13 +51,15 @@ type Invoice = {
 type Data = {
   authed: boolean;
   invoice?: Invoice;
+  products?: Product[];
   settings?: Record<string, string>;
   taxDefinitions?: TaxDefinition[];
   error?: string;
 };
 
 export const handler: Handlers<Data> = {
-  async GET(req, ctx) {
+  async GET(ctx) {
+    const req = ctx.req;
     const auth = getAuthHeaderFromCookie(
       req.headers.get("cookie") || undefined,
     );
@@ -71,19 +82,31 @@ export const handler: Handlers<Data> = {
           headers: { Location: `/invoices/${id}` },
         });
       }
-      // Also fetch settings for numberFormat
-      const [settings, taxDefinitions] = await Promise.all([
+      // Also fetch settings, products, and tax definitions
+      const [settings, products, taxDefinitions] = await Promise.all([
         backendGet("/api/v1/settings", auth) as Promise<Record<string, string>>,
+        backendGet("/api/v1/products", auth).catch(() => []) as Promise<
+          Product[]
+        >,
         backendGet("/api/v1/tax-definitions", auth).catch(() => []) as Promise<
           TaxDefinition[]
         >,
       ]);
-      return ctx.render({ authed: true, invoice, settings, taxDefinitions });
+      return {
+        data: {
+          authed: true,
+          invoice,
+          products,
+          settings,
+          taxDefinitions,
+        },
+      };
     } catch (e) {
-      return ctx.render({ authed: true, error: String(e) });
+      return { data: { authed: true, error: String(e) } };
     }
   },
-  async POST(req, ctx) {
+  async POST(ctx) {
+    const req = ctx.req;
     const auth = getAuthHeaderFromCookie(
       req.headers.get("cookie") || undefined,
     );
@@ -196,11 +219,13 @@ export const handler: Handlers<Data> = {
           `/api/v1/invoices/${id}`,
           auth,
         ) as Invoice;
-        return ctx.render({
-          authed: true,
-          invoice,
-          error: "Invoice number already exists",
-        });
+        return {
+          data: {
+            authed: true,
+            invoice,
+            error: "Invoice number already exists",
+          },
+        };
       }
       return new Response(String(e), { status: 500 });
     }
@@ -245,6 +270,7 @@ export default function EditInvoicePage(props: PageProps<Data>) {
           <InvoiceEditor
             mode="edit"
             customerName={inv.customer?.name}
+            products={props.data.products ?? []}
             currency={inv.currency}
             status={inv.status}
             invoiceNumber={inv.invoiceNumber}
@@ -276,7 +302,11 @@ export default function EditInvoicePage(props: PageProps<Data>) {
                 const singleDef = it.taxes && it.taxes.length === 1
                   ? it.taxes[0].taxDefinitionId
                   : undefined;
-                return { ...it, taxPercent: single, taxDefinitionId: singleDef } as Item & {
+                return {
+                  ...it,
+                  taxPercent: single,
+                  taxDefinitionId: singleDef,
+                } as Item & {
                   taxPercent?: number;
                   taxDefinitionId?: string;
                 };

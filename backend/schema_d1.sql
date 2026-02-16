@@ -5,7 +5,7 @@ CREATE TABLE settings (
   value TEXT NOT NULL
 );
 
-INSERT INTO settings (key, value) VALUES 
+INSERT INTO settings (key, value) VALUES
   ('companyName', 'Your Company'),
   ('companyAddress', '123 Business St, City, State 12345'),
   ('companyEmail', 'contact@yourcompany.com'),
@@ -33,6 +33,8 @@ CREATE TABLE customers (
   email TEXT,
   phone TEXT,
   address TEXT,
+  city TEXT,
+  postal_code TEXT,
   country_code TEXT,
   tax_id TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -69,7 +71,8 @@ CREATE TABLE invoice_items (
   unit_price NUMERIC NOT NULL,
   line_total NUMERIC NOT NULL,
   notes TEXT,
-  sort_order INTEGER DEFAULT 0
+  sort_order INTEGER DEFAULT 0,
+  product_id TEXT REFERENCES products(id)
 );
 
 CREATE TABLE invoice_attachments (
@@ -87,6 +90,7 @@ CREATE TABLE templates (
   name TEXT NOT NULL,
   html TEXT NOT NULL,
   is_default BOOLEAN DEFAULT 0,
+  template_type TEXT DEFAULT 'builtin',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -127,8 +131,59 @@ CREATE TABLE invoice_taxes (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE products (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  unit_price NUMERIC NOT NULL DEFAULT 0,
+  sku TEXT,
+  unit TEXT DEFAULT 'piece',
+  category TEXT,
+  tax_definition_id TEXT REFERENCES tax_definitions(id),
+  is_active BOOLEAN DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE product_categories (
+  id TEXT PRIMARY KEY,
+  code TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  sort_order INTEGER DEFAULT 0,
+  is_builtin BOOLEAN DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE product_units (
+  id TEXT PRIMARY KEY,
+  code TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  sort_order INTEGER DEFAULT 0,
+  is_builtin BOOLEAN DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX idx_invoices_number ON invoices(invoice_number);
 CREATE INDEX idx_invoices_customer ON invoices(customer_id);
 CREATE INDEX idx_invoices_status ON invoices(status);
 CREATE INDEX idx_invoices_share_token ON invoices(share_token);
 CREATE INDEX idx_invoice_items_invoice ON invoice_items(invoice_id);
+CREATE INDEX idx_products_sku ON products(sku);
+CREATE INDEX idx_products_active ON products(is_active);
+CREATE INDEX idx_products_category ON products(category);
+
+-- Insert default product categories
+INSERT INTO product_categories (id, code, name, sort_order, is_builtin) VALUES
+  ('service', 'service', 'Service', 1, 1),
+  ('goods', 'goods', 'Goods', 2, 1),
+  ('subscription', 'subscription', 'Subscription', 3, 1),
+  ('other', 'other', 'Other', 4, 1);
+
+-- Insert default product units
+INSERT INTO product_units (id, code, name, sort_order, is_builtin) VALUES
+  ('piece', 'piece', 'Piece', 1, 1),
+  ('hour', 'hour', 'Hour', 2, 1),
+  ('day', 'day', 'Day', 3, 1),
+  ('kg', 'kg', 'Kilogram', 4, 1),
+  ('m', 'm', 'Meter', 5, 1),
+  ('lump_sum', 'lump_sum', 'Lump Sum', 6, 1);
