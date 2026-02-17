@@ -54,11 +54,11 @@ export function getRateLimitConfig(): {
  * Respects X-Forwarded-For when RATE_LIMIT_TRUST_PROXY is enabled
  */
 export function getClientIp(headers: Headers, trustProxy: boolean): string {
-  // Always check CF-Connecting-IP first (Cloudflare Workers always sets this)
-  const cfConnectingIp = headers.get("cf-connecting-ip");
-  if (cfConnectingIp) return cfConnectingIp.trim();
-
   if (trustProxy) {
+    // CF-Connecting-IP is only trustworthy behind Cloudflare's network
+    const cfConnectingIp = headers.get("cf-connecting-ip");
+    if (cfConnectingIp) return cfConnectingIp.trim();
+
     // Check X-Forwarded-For (most common proxy header)
     const xForwardedFor = headers.get("x-forwarded-for");
     if (xForwardedFor) {

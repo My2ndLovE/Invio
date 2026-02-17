@@ -192,10 +192,18 @@ adminRoutes.use(
 
 // Protect product options routes
 adminRoutes.use(
+  "/product-categories",
+  requireAdminAuth,
+);
+adminRoutes.use(
   "/product-categories/*",
   requireAdminAuth,
 );
 
+adminRoutes.use(
+  "/product-units",
+  requireAdminAuth,
+);
 adminRoutes.use(
   "/product-units/*",
   requireAdminAuth,

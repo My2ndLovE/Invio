@@ -35,6 +35,9 @@ export function requireEnv(key: string): string {
   return val;
 }
 
+let _warnedDefaultPassword = false;
+let _warnedDefaultJwt = false;
+
 export function getAdminCredentials(env?: Record<string, any>) {
   let username: string;
   let password: string;
@@ -47,7 +50,8 @@ export function getAdminCredentials(env?: Record<string, any>) {
     username = getEnv("ADMIN_USER") || "admin";
     password = getEnv("ADMIN_PASS") || "admin";
   }
-  if (password === "admin") {
+  if (password === "admin" && !_warnedDefaultPassword) {
+    _warnedDefaultPassword = true;
     console.warn("WARNING: Using default admin password. Set ADMIN_PASS for production.");
   }
   return { username, password };
@@ -59,7 +63,8 @@ export function getJwtSecret(env?: Record<string, any>): string {
     return env.JWT_SECRET;
   }
   const secret = getEnv("JWT_SECRET") || "default-secret-change-me";
-  if (secret === "default-secret-change-me") {
+  if (secret === "default-secret-change-me" && !_warnedDefaultJwt) {
+    _warnedDefaultJwt = true;
     console.warn("WARNING: Using default JWT secret. Set JWT_SECRET for production.");
   }
   return secret;

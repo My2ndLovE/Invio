@@ -283,11 +283,14 @@ export const updateInvoice = async (id: string, data: UpdateInvoiceRequest) => {
   let totals = { subtotal: 0, discountAmount: 0, taxAmount: 0, total: 0 };
   let perLineCalc: PerLineCalc | undefined = undefined;
 
+  const resolvedDiscountPct = data.discountPercentage ?? existing.discountPercentage ?? 0;
+  const resolvedDiscountAmt = data.discountAmount || 0;
+
   if (hasPerLineTaxes) {
-    perLineCalc = calculatePerLineTotals(data.items as any, data.discountPercentage || 0, data.discountAmount || 0, data.pricesIncludeTax ?? defaultPricesIncludeTax, (data.roundingMode || defaultRoundingMode) as any);
+    perLineCalc = calculatePerLineTotals(data.items as any, resolvedDiscountPct, resolvedDiscountAmt, data.pricesIncludeTax ?? defaultPricesIncludeTax, (data.roundingMode || defaultRoundingMode) as any);
     totals = { subtotal: perLineCalc.subtotal, discountAmount: perLineCalc.discountAmount, taxAmount: perLineCalc.taxAmount, total: perLineCalc.total };
   } else {
-    totals = calculateInvoiceTotals(data.items, data.discountPercentage || 0, data.discountAmount || 0, (typeof data.taxRate === "number" ? data.taxRate : defaultTaxRate), data.pricesIncludeTax ?? defaultPricesIncludeTax, (data.roundingMode || defaultRoundingMode) as any);
+    totals = calculateInvoiceTotals(data.items, resolvedDiscountPct, resolvedDiscountAmt, (typeof data.taxRate === "number" ? data.taxRate : defaultTaxRate), data.pricesIncludeTax ?? defaultPricesIncludeTax, (data.roundingMode || defaultRoundingMode) as any);
   }
 
   const now = new Date();
@@ -307,7 +310,7 @@ export const updateInvoice = async (id: string, data: UpdateInvoiceRequest) => {
       data.status || existing.status,
       totals.subtotal,
       totals.discountAmount,
-      data.discountPercentage ?? existing.discountPercentage ?? 0,
+      resolvedDiscountPct,
       hasPerLineTaxes ? 0 : (typeof data.taxRate === "number" ? data.taxRate : existing.taxRate ?? 0),
       totals.taxAmount,
       totals.total,
