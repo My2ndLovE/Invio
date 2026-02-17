@@ -108,6 +108,11 @@ function calculatePerLineTotals(
 
 export const createInvoice = async (data: CreateInvoiceRequest): Promise<InvoiceWithDetails> => {
   const db = getDatabase();
+
+  // Validate customer exists before any DB writes
+  const customer = await getCustomerById(data.customerId);
+  if (!customer) throw new Error("Customer not found");
+
   const invoiceId = generateUUID();
   const shareToken = generateShareToken();
   let invoiceNumber = data.invoiceNumber;
@@ -199,9 +204,6 @@ export const createInvoice = async (data: CreateInvoiceRequest): Promise<Invoice
     await db.execute(`INSERT INTO invoice_taxes (id, invoice_id, tax_definition_id, percent, taxable_amount, tax_amount, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`, [generateUUID(), invoiceId, (data as any).taxDefinitionId, percent, taxable, invoice.taxAmount, now.toISOString()]);
   }
 
-  const customer = await getCustomerById(data.customerId);
-  if (!customer) throw new Error("Customer not found");
-
   return { ...invoice, customer, items, taxes: perLineCalc?.summary.map(s => ({ id: "", invoiceId, percent: s.percent, taxableAmount: s.taxable, taxAmount: s.amount })) };
 };
 
@@ -220,8 +222,9 @@ export const getInvoiceById = async (id: string): Promise<InvoiceWithDetails | n
   const result = await db.query(`SELECT id, invoice_number, customer_id, issue_date, due_date, currency, status, subtotal, discount_amount, discount_percentage, tax_rate, tax_amount, total, payment_terms, notes, share_token, created_at, updated_at, prices_include_tax, rounding_mode FROM invoices WHERE id = ?`, [id]);
   if (result.length === 0) return null;
   const invoice = mapRowToInvoice(result[0]);
-  const customer = await getCustomerById(invoice.customerId);
-  if (!customer) return null;
+  const customer = await getCustomerById(invoice.customerId) ?? {
+    id: invoice.customerId, name: "(Deleted Customer)", createdAt: new Date(),
+  };
 
   const itemsResult = await db.query(`SELECT id, invoice_id, description, quantity, unit_price, line_total, notes, sort_order FROM invoice_items WHERE invoice_id = ? ORDER BY sort_order`, [id]);
   const items = itemsResult.map((row: any) => ({ id: row[0], invoiceId: row[1], description: row[2], quantity: row[3], unitPrice: row[4], lineTotal: row[5], notes: row[6], sortOrder: row[7] }));
@@ -304,8 +307,8 @@ export const updateInvoice = async (id: string, data: UpdateInvoiceRequest) => {
       data.status || existing.status,
       totals.subtotal,
       totals.discountAmount,
-      data.discountPercentage || 0,
-      hasPerLineTaxes ? 0 : (data.taxRate || 0),
+      data.discountPercentage ?? existing.discountPercentage ?? 0,
+      hasPerLineTaxes ? 0 : (typeof data.taxRate === "number" ? data.taxRate : existing.taxRate ?? 0),
       totals.taxAmount,
       totals.total,
       data.paymentTerms ?? existing.paymentTerms,

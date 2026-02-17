@@ -557,7 +557,10 @@ function assertLocalManifestShape(m: unknown): asserts m is LocalManifest {
 export async function installLocalTemplateFromZip(
   zipData: Uint8Array,
 ): Promise<Template> {
-  // Dynamic import — only used in Deno local mode (Workers doesn't call this path)
+  if (typeof Deno === "undefined") {
+    throw new Error("Template zip upload is not supported in this runtime");
+  }
+  // Dynamic import — only used in Deno local mode
   const { ZipReader } = await import("https://deno.land/x/zipjs@v2.7.34/index.js");
   // Create a blob from the zip data for the ZipReader
   const blob = new Blob([zipData]);

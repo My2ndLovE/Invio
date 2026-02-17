@@ -455,7 +455,7 @@ async function tryPuppeteerPdf(html: string, cloudflareBrowser: any): Promise<Ui
 
     try {
       const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: "networkidle0" });
+      await page.setContent(html, { waitUntil: "load" });
       const pdfBuffer = await page.pdf({
         format: "A4",
         printBackground: true,
@@ -546,6 +546,7 @@ async function renderPdfWithChromeHeadlessShell(html: string): Promise<Uint8Arra
 }
 
 async function resolveGhostscriptExecutable(): Promise<string | null> {
+  if (typeof Deno === "undefined") return null;
   const candidates: string[] = [];
   try {
     const configured = Deno.env.get("GHOSTSCRIPT_BIN");

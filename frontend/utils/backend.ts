@@ -104,7 +104,11 @@ export async function backendPut(
     },
     body: JSON.stringify(body ?? {}),
   });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (!res.ok) {
+    let detail = "";
+    try { const b = await res.json(); detail = b?.error || b?.message || ""; } catch { /* ignore */ }
+    throw new Error(`${res.status} ${res.statusText}${detail ? `: ${detail}` : ""}`);
+  }
   return await res.json();
 }
 
@@ -121,7 +125,11 @@ export async function backendPatch(
     },
     body: JSON.stringify(body ?? {}),
   });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (!res.ok) {
+    let detail = "";
+    try { const b = await res.json(); detail = b?.error || b?.message || ""; } catch { /* ignore */ }
+    throw new Error(`${res.status} ${res.statusText}${detail ? `: ${detail}` : ""}`);
+  }
   return await res.json();
 }
 
@@ -130,7 +138,11 @@ export async function backendDelete(path: string, authHeader: string) {
     method: "DELETE",
     headers: { Authorization: authHeader },
   });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (!res.ok) {
+    let detail = "";
+    try { const b = await res.json(); detail = b?.error || b?.message || ""; } catch { /* ignore */ }
+    throw new Error(`${res.status} ${res.statusText}${detail ? `: ${detail}` : ""}`);
+  }
   // Some DELETEs may return 204 No Content
   const contentType = res.headers.get("content-type") || "";
   if (res.status === 204 || !contentType.includes("application/json")) {

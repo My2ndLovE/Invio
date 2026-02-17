@@ -6,12 +6,15 @@ let _db: Database | undefined;
 // Request-scoped database for Cloudflare Workers (fallback when AsyncLocalStorage unavailable)
 let _requestDb: Database | undefined;
 
-// AsyncLocalStorage to handle request-scoped database on Cloudflare
-// @ts-ignore: AsyncLocalStorage is global in Workers and Deno
-const hasAsyncLocalStorage = typeof AsyncLocalStorage !== "undefined";
-const storage = hasAsyncLocalStorage
-  ? new AsyncLocalStorage<Database>()
-  : null;
+// AsyncLocalStorage for request-scoped database isolation
+let storage: any = null;
+try {
+  // Workers with nodejs_compat and Deno both support this import
+  const { AsyncLocalStorage: ALS } = await import("node:async_hooks");
+  storage = new ALS<Database>();
+} catch {
+  // Fallback to module-level variable (less safe under concurrency)
+}
 
 export function getDatabase(): Database {
   // Try AsyncLocalStorage first (Deno)

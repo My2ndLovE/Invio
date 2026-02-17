@@ -36,18 +36,21 @@ export function requireEnv(key: string): string {
 }
 
 export function getAdminCredentials(env?: Record<string, any>) {
+  let username: string;
+  let password: string;
   // If env is provided (Cloudflare Workers), use it directly
   if (env) {
-    return {
-      username: env.ADMIN_USER || "admin",
-      password: env.ADMIN_PASS || "admin",
-    };
+    username = env.ADMIN_USER || "admin";
+    password = env.ADMIN_PASS || "admin";
+  } else {
+    // Otherwise fall back to getEnv (Deno)
+    username = getEnv("ADMIN_USER") || "admin";
+    password = getEnv("ADMIN_PASS") || "admin";
   }
-  // Otherwise fall back to getEnv (Deno)
-  return {
-    username: getEnv("ADMIN_USER") || "admin",
-    password: getEnv("ADMIN_PASS") || "admin",
-  };
+  if (password === "admin") {
+    console.warn("WARNING: Using default admin password. Set ADMIN_PASS for production.");
+  }
+  return { username, password };
 }
 
 export function getJwtSecret(env?: Record<string, any>): string {
@@ -55,7 +58,11 @@ export function getJwtSecret(env?: Record<string, any>): string {
   if (env && env.JWT_SECRET) {
     return env.JWT_SECRET;
   }
-  return getEnv("JWT_SECRET") || "default-secret-change-me";
+  const secret = getEnv("JWT_SECRET") || "default-secret-change-me";
+  if (secret === "default-secret-change-me") {
+    console.warn("WARNING: Using default JWT secret. Set JWT_SECRET for production.");
+  }
+  return secret;
 }
 
 export function isDemoMode(): boolean {

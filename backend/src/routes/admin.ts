@@ -190,6 +190,17 @@ adminRoutes.use(
   requireAdminAuth,
 );
 
+// Protect product options routes
+adminRoutes.use(
+  "/product-categories/*",
+  requireAdminAuth,
+);
+
+adminRoutes.use(
+  "/product-units/*",
+  requireAdminAuth,
+);
+
 // Protect export routes
 adminRoutes.use(
   "/export/*",
@@ -1260,6 +1271,9 @@ export { adminRoutes };
 
 // Export all data (DB file, JSON dump, installed template assets) as a tar.gz
 adminRoutes.get("/export/full", async (c) => {
+  if (typeof Deno === "undefined") {
+    return c.json({ error: "Export not supported in this runtime" }, 501);
+  }
   // Parse options: includeDb (default true), includeJson (default true), includeAssets (default true)
   const url = new URL(c.req.url);
   const includeDb =

@@ -54,11 +54,14 @@ export function getRateLimitConfig(): {
  * Respects X-Forwarded-For when RATE_LIMIT_TRUST_PROXY is enabled
  */
 export function getClientIp(headers: Headers, trustProxy: boolean): string {
+  // Always check CF-Connecting-IP first (Cloudflare Workers always sets this)
+  const cfConnectingIp = headers.get("cf-connecting-ip");
+  if (cfConnectingIp) return cfConnectingIp.trim();
+
   if (trustProxy) {
-    // Check X-Forwarded-For first (most common proxy header)
+    // Check X-Forwarded-For (most common proxy header)
     const xForwardedFor = headers.get("x-forwarded-for");
     if (xForwardedFor) {
-      // Take the first IP (original client) from the chain
       const firstIp = xForwardedFor.split(",")[0]?.trim();
       if (firstIp) return firstIp;
     }
@@ -66,14 +69,8 @@ export function getClientIp(headers: Headers, trustProxy: boolean): string {
     // Check X-Real-IP (nginx)
     const xRealIp = headers.get("x-real-ip");
     if (xRealIp) return xRealIp.trim();
-
-    // Check CF-Connecting-IP (Cloudflare)
-    const cfConnectingIp = headers.get("cf-connecting-ip");
-    if (cfConnectingIp) return cfConnectingIp.trim();
   }
 
-  // Fallback: use a generic identifier if no IP can be determined
-  // In production behind a proxy, this should not happen if configured correctly
   return "unknown";
 }
 
