@@ -251,11 +251,51 @@ export async function getTemplateById(id: string): Promise<Template | undefined>
 
 let builtInDefaultTemplate: Template | null | undefined;
 
+// Embedded template HTML — loaded from static files at build time (esbuild html-inline plugin)
+// or from disk at runtime (Deno). This lets CF Workers access templates without D1 seeding.
+let _embeddedProfessionalModern: string | null = null;
+let _embeddedMinimalistClean: string | null = null;
+
+async function getEmbeddedTemplateHtml(id: string): Promise<string | null> {
+  if (id === "professional-modern" || id === "builtin-professional-modern") {
+    if (_embeddedProfessionalModern !== null) return _embeddedProfessionalModern;
+    try {
+      // esbuild html-inline plugin converts this to a string constant in the bundle
+      const mod = await import("../../static/templates/professional-modern.html");
+      _embeddedProfessionalModern = (mod as any).default ?? mod;
+      return _embeddedProfessionalModern;
+    } catch {
+      // Deno fallback: read from disk
+      try {
+        const url = new URL("../../static/templates/professional-modern.html", import.meta.url);
+        _embeddedProfessionalModern = (globalThis as any).Deno?.readTextFileSync?.(url) ?? null;
+        return _embeddedProfessionalModern;
+      } catch { return null; }
+    }
+  }
+  if (id === "minimalist-clean" || id === "builtin-minimalist-clean") {
+    if (_embeddedMinimalistClean !== null) return _embeddedMinimalistClean;
+    try {
+      const mod = await import("../../static/templates/minimalist-clean.html");
+      _embeddedMinimalistClean = (mod as any).default ?? mod;
+      return _embeddedMinimalistClean;
+    } catch {
+      try {
+        const url = new URL("../../static/templates/minimalist-clean.html", import.meta.url);
+        _embeddedMinimalistClean = (globalThis as any).Deno?.readTextFileSync?.(url) ?? null;
+        return _embeddedMinimalistClean;
+      } catch { return null; }
+    }
+  }
+  return null;
+}
+
 function loadBuiltinTemplate(): Template | null {
   if (builtInDefaultTemplate !== undefined) {
     return builtInDefaultTemplate;
   }
   if (typeof Deno === "undefined") {
+    // On CF Workers, we use async getEmbeddedTemplateHtml instead
     builtInDefaultTemplate = null;
     return null;
   }
@@ -309,7 +349,42 @@ export async function getDefaultTemplate(): Promise<Template | null> {
     };
   }
 
-  return loadBuiltinTemplate();
+  // Deno: try sync filesystem load
+  const builtin = loadBuiltinTemplate();
+  if (builtin) return builtin;
+
+  // CF Workers: try embedded template HTML and auto-seed into D1
+  const html = await getEmbeddedTemplateHtml("minimalist-clean");
+  if (html) {
+    const template: Template = {
+      id: "minimalist-clean",
+      name: "Minimalist Clean",
+      html,
+      isDefault: true,
+      templateType: "builtin",
+      createdAt: new Date(0),
+    };
+    // Auto-seed into D1 so future requests don't need the embedded fallback
+    try {
+      await db.query(
+        "INSERT OR IGNORE INTO templates (id, name, html, is_default, template_type, created_at) VALUES (?, ?, ?, 1, 'builtin', CURRENT_TIMESTAMP)",
+        [template.id, template.name, template.html],
+      );
+      // Also seed professional-modern
+      const pmHtml = await getEmbeddedTemplateHtml("professional-modern");
+      if (pmHtml) {
+        await db.query(
+          "INSERT OR IGNORE INTO templates (id, name, html, is_default, template_type, created_at) VALUES (?, ?, ?, 0, 'builtin', CURRENT_TIMESTAMP)",
+          ["professional-modern", "Professional Modern", pmHtml],
+        );
+      }
+    } catch (e) {
+      console.warn("Auto-seed templates into D1 failed:", e);
+    }
+    return template;
+  }
+
+  return null;
 }
 
 export async function loadTemplateFromFile(

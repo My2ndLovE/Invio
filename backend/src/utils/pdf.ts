@@ -352,9 +352,9 @@ export async function generateInvoicePDF(
   let pdfBytes: Uint8Array;
   if (opts?.browser) {
     // Cloudflare Browser Rendering path
-    const result = await tryPuppeteerPdf(html, opts.browser);
+    const { pdf: result, error: puppeteerError } = await tryPuppeteerPdf(html, opts.browser);
     if (!result) {
-      throw new Error("Cloudflare Browser Rendering PDF generation failed.");
+      throw new Error(`Cloudflare Browser Rendering PDF generation failed: ${puppeteerError || "unknown error"}`);
     }
     pdfBytes = result;
   } else {
@@ -448,7 +448,7 @@ export async function buildInvoiceHTML(
  * Render HTML to PDF using Cloudflare Browser Rendering (Puppeteer).
  * Used when running on Cloudflare Workers with a Browser binding.
  */
-async function tryPuppeteerPdf(html: string, cloudflareBrowser: any): Promise<Uint8Array | null> {
+async function tryPuppeteerPdf(html: string, cloudflareBrowser: any): Promise<{ pdf: Uint8Array | null; error?: string }> {
   try {
     const puppeteer = (await import("@cloudflare/puppeteer")).default;
     const browser = await puppeteer.launch(cloudflareBrowser);
@@ -461,13 +461,14 @@ async function tryPuppeteerPdf(html: string, cloudflareBrowser: any): Promise<Ui
         printBackground: true,
         margin: { top: "10mm", right: "10mm", bottom: "10mm", left: "10mm" },
       });
-      return new Uint8Array(pdfBuffer);
+      return { pdf: new Uint8Array(pdfBuffer) };
     } finally {
       await browser.close();
     }
   } catch (e) {
-    console.error("Puppeteer PDF rendering failed:", e);
-    return null;
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("Puppeteer PDF rendering failed:", msg);
+    return { pdf: null, error: msg };
   }
 }
 

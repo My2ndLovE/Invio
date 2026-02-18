@@ -1,4 +1,16 @@
 import * as esbuild from "esbuild";
+import { readFileSync } from "node:fs";
+
+// Plugin to inline static HTML template files as string constants
+const htmlInlinePlugin = {
+  name: "html-inline",
+  setup(build) {
+    build.onLoad({ filter: /\.html$/ }, (args) => {
+      const text = readFileSync(args.path, "utf8");
+      return { contents: `export default ${JSON.stringify(text)};`, loader: "js" };
+    });
+  },
+};
 
 // Plugin to map Deno-style bare specifiers to Node/Workers equivalents
 const denoCompatPlugin = {
@@ -41,7 +53,7 @@ try {
     conditions: ["worker", "browser"],
     // Node built-ins are external (resolved at runtime via nodejs_compat)
     external: ["node:*"],
-    plugins: [denoCompatPlugin],
+    plugins: [htmlInlinePlugin, denoCompatPlugin],
     // Preserve dynamic imports (e.g., @cloudflare/puppeteer, zipjs)
     splitting: false,
     logLevel: "info",
