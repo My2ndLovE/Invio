@@ -41,6 +41,8 @@ type Invoice = {
   items?: Item[];
   currency?: string;
   taxRate?: number;
+  discountPercentage?: number;
+  discountAmount?: number;
   pricesIncludeTax?: boolean;
   roundingMode?: string;
   notes?: string;
@@ -137,6 +139,8 @@ export const handler: Handlers<Data> = {
     const taxMode = String(form.get("taxMode") || "invoice") as
       | "invoice"
       | "line";
+    const discountPercentage = Number(form.get("discountPercentage") || 0) || 0;
+    const discountAmount = Number(form.get("discountAmount") || 0) || 0;
 
     const items: Item[] = [];
     let i = 0;
@@ -200,13 +204,15 @@ export const handler: Handlers<Data> = {
         taxDefinitionId: taxMode === "invoice"
           ? (invoiceTaxDefinitionId || null)
           : undefined,
+        discountPercentage,
+        discountAmount,
         pricesIncludeTax,
         roundingMode,
         invoiceNumber: invoiceNumber || undefined,
         issueDate: issueDate || undefined,
         dueDate: dueDate || null,
         items,
-        taxMode, // informational only for now
+        taxMode,
       });
       return new Response(null, {
         status: 303,
@@ -288,6 +294,8 @@ export default function EditInvoicePage(props: PageProps<Data>) {
                 inv.items.some((i) => i.taxes && i.taxes.length))
               ? "line"
               : "invoice"}
+            discountPercentage={inv.discountPercentage}
+            discountAmount={inv.discountAmount}
             showDates
             issueDate={(inv.issue_date as string) || ""}
             dueDate={(inv.due_date as string) || ""}

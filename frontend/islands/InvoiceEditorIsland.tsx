@@ -51,6 +51,8 @@ export type InvoiceEditorProps = {
   pricesIncludeTax?: boolean;
   roundingMode?: string;
   taxMode?: "invoice" | "line";
+  discountPercentage?: number;
+  discountAmount?: number;
   notes?: string;
   paymentTerms?: string;
   items: IncomingItem[];
@@ -182,6 +184,14 @@ export default function InvoiceEditorIsland(props: InvoiceEditorProps) {
   );
   const [roundingMode, setRoundingMode] = useState<"line" | "total">(
     props.roundingMode === "total" ? "total" : "line",
+  );
+  const [discountType, setDiscountType] = useState<"percentage" | "fixed">(
+    (props.discountPercentage && props.discountPercentage > 0) ? "percentage" : "fixed",
+  );
+  const [discountValue, setDiscountValue] = useState(
+    (props.discountPercentage && props.discountPercentage > 0)
+      ? String(props.discountPercentage)
+      : String(props.discountAmount || 0),
   );
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dropIndicator, setDropIndicator] = useState<
@@ -382,18 +392,47 @@ export default function InvoiceEditorIsland(props: InvoiceEditorProps) {
 
     subtotal = round2(subtotal);
     tax = round2(tax);
-    const total = round2(subtotal + tax);
+
+    // Apply discount
+    const dv = parseFloat(discountValue) || 0;
+    let discount = 0;
+    if (discountType === "percentage" && dv > 0) {
+      discount = round2(subtotal * (dv / 100));
+    } else if (discountType === "fixed" && dv > 0) {
+      discount = round2(Math.min(dv, subtotal));
+    }
+
+    // Recalculate tax on discounted subtotal if invoice-level tax
+    if (discount > 0 && taxMode === "invoice") {
+      const invoiceRate = parseFloat(invoiceTaxRate) || 0;
+      const includeTax = pricesIncludeTax === "true";
+      const discountedSubtotal = subtotal - discount;
+      if (includeTax && invoiceRate > 0) {
+        const divisor = 1 + invoiceRate / 100;
+        if (divisor > 0) {
+          tax = round2(discountedSubtotal - discountedSubtotal / divisor);
+        }
+      } else if (!includeTax && invoiceRate > 0) {
+        tax = round2(discountedSubtotal * (invoiceRate / 100));
+      }
+    }
+
+    const total = round2(subtotal - discount + tax);
     const format = (value: number) =>
       formatMoney(value, currency || "USD", numberFormat);
 
     return {
       subtotal: format(subtotal),
+      discount: format(discount),
       tax: format(tax),
       total: format(total),
       rawTax: tax,
+      rawDiscount: discount,
     };
   }, [
     currency,
+    discountType,
+    discountValue,
     invoiceTaxRate,
     items,
     numberFormat,
@@ -1156,6 +1195,10 @@ export default function InvoiceEditorIsland(props: InvoiceEditorProps) {
         </div>
       </div>
 
+      {/* Hidden fields for discount values */}
+      <input type="hidden" name="discountPercentage" value={discountType === "percentage" ? discountValue : "0"} />
+      <input type="hidden" name="discountAmount" value={discountType === "fixed" ? discountValue : "0"} />
+
       <div
         id="totals-preview"
         class="bg-base-200 rounded-box p-3 sm:p-4 text-sm"
@@ -1166,6 +1209,17 @@ export default function InvoiceEditorIsland(props: InvoiceEditorProps) {
               <span class="text-base-content/60">{t("Subtotal")}:</span>
               <span class="font-semibold sm:ml-2" id="preview-subtotal">
                 {totals.subtotal}
+              </span>
+            </div>
+            <div
+              id="preview-discount-container"
+              class={totals.rawDiscount < 0.005
+                ? "hidden"
+                : "flex justify-between sm:block"}
+            >
+              <span class="text-base-content/60">{t("Discount")}:</span>
+              <span class="font-semibold sm:ml-2 text-success" id="preview-discount">
+                -{totals.discount}
               </span>
             </div>
             <div
@@ -1186,6 +1240,36 @@ export default function InvoiceEditorIsland(props: InvoiceEditorProps) {
               {totals.total}
             </span>
           </div>
+        </div>
+
+        {/* Discount controls */}
+        <div class="flex flex-col sm:flex-row items-start sm:items-center gap-2 mt-3 pt-3 border-t border-base-300">
+          <span class="text-base-content/60 text-xs shrink-0">{t("Discount")}:</span>
+          <select
+            class="select select-bordered select-xs w-auto"
+            value={discountType}
+            onInput={(event) =>
+              setDiscountType(
+                (event.currentTarget as HTMLSelectElement).value as "percentage" | "fixed",
+              )}
+            data-writable
+            disabled={isDemo}
+          >
+            <option value="percentage">%</option>
+            <option value="fixed">{currency || "USD"}</option>
+          </select>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            value={discountValue}
+            class="input input-bordered input-xs w-24"
+            onInput={(event) =>
+              setDiscountValue((event.currentTarget as HTMLInputElement).value)}
+            data-writable
+            disabled={isDemo}
+            placeholder="0"
+          />
         </div>
       </div>
 

@@ -162,6 +162,8 @@ export const handler: Handlers<Data> = {
     const taxMode = String(form.get("taxMode") || "invoice") as
       | "invoice"
       | "line";
+    const discountPercentage = Number(form.get("discountPercentage") || 0) || 0;
+    const discountAmount = Number(form.get("discountAmount") || 0) || 0;
 
     const items: Item[] = [];
     let i = 0;
@@ -277,6 +279,8 @@ export const handler: Handlers<Data> = {
       notes: notes || undefined,
       paymentTerms: paymentTerms || undefined,
       taxRate: taxMode === "invoice" ? taxRate : 0,
+      discountPercentage,
+      discountAmount,
       pricesIncludeTax,
       roundingMode,
       items,

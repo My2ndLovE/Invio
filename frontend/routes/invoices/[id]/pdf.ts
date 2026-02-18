@@ -22,7 +22,13 @@ export const handler: Handlers = {
 
     const res = await fetch(backendUrl, { headers: { Authorization: auth } });
     if (!res.ok) {
-      return new Response(`Upstream error: ${res.status} ${res.statusText}`, {
+      let detail = `${res.status} ${res.statusText}`;
+      try {
+        const body = await res.json() as { error?: string; details?: string };
+        if (body.details) detail = body.details;
+        else if (body.error) detail = body.error;
+      } catch { /* body not JSON */ }
+      return new Response(`PDF generation failed: ${detail}`, {
         status: res.status,
       });
     }

@@ -8,7 +8,13 @@ export const handler: Handlers = {
       `${BACKEND_URL}/api/v1/public/invoices/${share_token}/pdf`;
     const res = await fetch(backendUrl);
     if (!res.ok) {
-      return new Response(`Upstream error: ${res.status} ${res.statusText}`, {
+      let detail = `${res.status} ${res.statusText}`;
+      try {
+        const body = await res.json() as { error?: string; details?: string };
+        if (body.details) detail = body.details;
+        else if (body.error) detail = body.error;
+      } catch { /* body not JSON */ }
+      return new Response(`PDF generation failed: ${detail}`, {
         status: res.status,
       });
     }
