@@ -28,12 +28,6 @@ const denoCompatPlugin = {
       external: true,
     }));
 
-    // Mark @cloudflare/puppeteer as external — provided by Workers runtime
-    build.onResolve({ filter: /^@cloudflare\/puppeteer$/ }, () => ({
-      path: "@cloudflare/puppeteer",
-      external: true,
-    }));
-
     // Catch any deno.land URL imports that weren't converted to dynamic imports
     build.onResolve({ filter: /^https:\/\/deno\.land\// }, (args) => {
       console.warn(`Warning: static deno.land import found: ${args.path}`);
