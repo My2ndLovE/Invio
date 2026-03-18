@@ -191,7 +191,7 @@ export default function InvoiceEditorIsland(props: InvoiceEditorProps) {
   const [discountValue, setDiscountValue] = useState(
     (props.discountPercentage && props.discountPercentage > 0)
       ? String(props.discountPercentage)
-      : String(props.discountAmount || 0),
+      : (props.discountAmount ? String(props.discountAmount) : ""),
   );
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dropIndicator, setDropIndicator] = useState<
@@ -1196,8 +1196,8 @@ export default function InvoiceEditorIsland(props: InvoiceEditorProps) {
       </div>
 
       {/* Hidden fields for discount values */}
-      <input type="hidden" name="discountPercentage" value={discountType === "percentage" ? discountValue : "0"} />
-      <input type="hidden" name="discountAmount" value={discountType === "fixed" ? discountValue : "0"} />
+      <input type="hidden" name="discountPercentage" value={discountType === "percentage" ? (discountValue || "0") : "0"} />
+      <input type="hidden" name="discountAmount" value={discountType === "fixed" ? (discountValue || "0") : "0"} />
 
       <div
         id="totals-preview"
